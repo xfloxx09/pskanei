@@ -403,6 +403,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             ("Voiceover (TTS)", OpenAITTSProvider),
         ]
         tts_url = None
+        tts_errors = []
         for role, cls in tts_classes:
             for pid, p in all_providers.items():
                 if not p.enabled or p.role != role:
@@ -414,7 +415,8 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     tts = cls(api_key=key)
                     tts_url = await tts.generate_speech(voiceover)
                     break
-                except Exception:
+                except Exception as exc:
+                    tts_errors.append(f"{cls.__name__}: {exc}")
                     continue
             if tts_url:
                 break
@@ -423,11 +425,11 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             try:
                 edge = EdgeTTSProvider()
                 tts_url = await edge.generate_speech(voiceover)
-            except Exception:
-                pass
+            except Exception as exc:
+                tts_errors.append(f"EdgeTTS: {exc}")
 
         if not tts_url:
-            story.content["error"] = "No enabled TTS provider with valid API key"
+            story.content["error"] = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
             story.content["status_msg"] = "TTS failed"
             story.status = "failed"
             await db.commit()
@@ -446,6 +448,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             ("AI avatar narration", SynthesiaProvider),
         ]
         video_url = None
+        video_errors = []
         for role, cls in video_classes:
             for pid, p in all_providers.items():
                 if not p.enabled or p.role != role:
@@ -457,13 +460,14 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     video = cls(api_key=key)
                     video_url = await video.render_video(prompt, tts_url)
                     break
-                except Exception:
+                except Exception as exc:
+                    video_errors.append(f"{cls.__name__}: {exc}")
                     continue
             if video_url:
                 break
 
         if not video_url:
-            story.content["error"] = "No enabled video/avatar provider with valid API key"
+            story.content["error"] = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
             story.content["status_msg"] = "Video failed"
             story.status = "failed"
             await db.commit()
