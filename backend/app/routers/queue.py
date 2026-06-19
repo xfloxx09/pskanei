@@ -251,53 +251,53 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     if s_obj and s_obj.prompt_templates:
         custom_prompt = s_obj.prompt_templates.get("curator", "")
 
-    for i in range(0, len(batch), 10):
-        chunk = batch[i:i + 10]
-        try:
-            curation = await curate_stories(chunk, deepseek_key, custom_prompt=custom_prompt)
-            for a in curation.get("analyses", []):
-                all_analyses[a["id"]] = a
-        except Exception as e:
-            raise HTTPException(502, f"DeepSeek API error on batch {i//10 + 1}: {str(e)}")
+    # Analyze EVERY story individually with up to 3 retries
+    for s in batch:
+        for attempt in range(3):
+            try:
+                curation = await curate_stories([s], deepseek_key, custom_prompt=custom_prompt)
+                analyses = curation.get("analyses", [])
+                if analyses:
+                    all_analyses[s["id"]] = analyses[0]
+                    break
+            except Exception:
+                pass
 
-    # Retry individually for missed stories
-    missing = [s for s in batch if s["id"] not in all_analyses]
-    for s in missing:
-        try:
-            curation = await curate_stories([s], deepseek_key, custom_prompt=custom_prompt)
-            for a in curation.get("analyses", []):
-                all_analyses[a["id"]] = a
-        except Exception:
-            pass
-
-    # Pick top 3 by AI viral_score
-    sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
-    top_ids = set(a["id"] for a in sorted_all[:3])
-    for a in sorted_all[:3]:
-        a["is_top_pick"] = True
-    for a in sorted_all[3:]:
-        a["is_top_pick"] = False
+    # Update each story
     updated = 0
-
     for sid, analysis in all_analyses.items():
         try:
-            s = await db.get(Story, UUID(sid))
-            if s:
-                s.content = s.content or {}
-                s.content["ai_curation"] = {
+            story_obj = await db.get(Story, UUID(sid))
+            if story_obj:
+                story_obj.content = story_obj.content or {}
+                story_obj.content["ai_curation"] = {
                     "category": analysis.get("category", ""),
                     "viral_score": analysis.get("viral_score", 0),
                     "hook_angle": analysis.get("hook_angle", ""),
                     "reasoning": analysis.get("reasoning", ""),
-                    "is_top_pick": sid in top_ids,
+                    "is_top_pick": False,
                 }
                 updated += 1
-        except (ValueError, TypeError):
+        except Exception:
             pass
 
+    # Top 3 by AI score
+    sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
+    top_ids = set()
+    for a in sorted_all[:3]:
+        for tid, av in all_analyses.items():
+            if av is a:
+                top_ids.add(tid)
+                try:
+                    ts = await db.get(Story, UUID(tid))
+                    if ts and ts.content and "ai_curation" in ts.content:
+                        ts.content["ai_curation"]["is_top_pick"] = True
+                except Exception:
+                    pass
+                break
+
     await db.commit()
-    sample_ids = list(all_analyses.keys())[:5]
-    return {"success": True, "analyzed": updated, "top_pick_ids": list(top_ids), "sample_ids": sample_ids}
+    return {"success": True, "analyzed": len(all_analyses), "top_pick_ids": list(top_ids), "total_stories": len(batch)}
 
 
 @router.patch("/{story_id}/prompt")
