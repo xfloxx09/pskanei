@@ -178,21 +178,21 @@ async def _run_scrape_pipeline():
                     pass
 
             if deepseek_key:
-                    story_batch = [
-                        {
-                            "id": str(s.id),
-                            "title": s.title,
-                            "score": s.score,
-                            "source": s.source,
-                        }
-                        for s in (
-                            await db.execute(
-                                select(Story)
-                                .order_by(Story.score.desc())
-                                .limit(50)
-                            )
-                        ).scalars().all()
-                    ]
+                story_batch = [
+                    {
+                        "id": str(s.id),
+                        "title": s.title,
+                        "score": s.score,
+                        "source": s.source,
+                    }
+                    for s in (
+                        await db.execute(
+                            select(Story)
+                            .order_by(Story.score.desc())
+                            .limit(50)
+                        )
+                    ).scalars().all()
+                ]
 
                 if story_batch:
                     result = await curate_stories(story_batch, deepseek_key)
