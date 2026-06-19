@@ -280,21 +280,21 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
         return await _run_create_pipeline_inner(story_id, skip_budget_check, skip_prompt)
     except Exception as e:
         from ..database import async_session
-        import json as _json2
-        from sqlalchemy import text as _text2
-        err_str = _json2.dumps(str(e)[:500])
-        msg_str = _json2.dumps(("Crash: " + str(e))[:80])
         async with async_session() as err_db:
+            from sqlalchemy import text as _text
+            import json as _json
+            err_json = _json.dumps(str(e)[:500])
+            msg_json = _json.dumps(("Crash: " + str(e))[:80])
             await err_db.execute(
-                _text2("UPDATE stories SET status = 'failed', updated_at = NOW(), content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', :err::jsonb, true), '{status_msg}', :msg::jsonb, true) WHERE id = :id::uuid"),
-                {"err": err_str, "msg": msg_str, "id": story_id},
+                _text("UPDATE stories SET status = 'failed', updated_at = NOW(), content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', :err::jsonb, true), '{status_msg}', :msg::jsonb, true) WHERE id = :id::uuid"),
+                {"err": err_json, "msg": msg_json, "id": story_id},
             )
             await err_db.commit()
         return {"status": "error", "reason": str(e)}
 
 
 async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = False, skip_prompt: bool = False):
-    import os
+    import os, json as _json
 
     os.environ.setdefault("ENVIRONMENT", "production")
 
@@ -318,38 +318,10 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         SynthesiaProvider,
     )
 
-    import json as _json
-    from sqlalchemy import text as _text
-
-    def _raw_sql(sql, params):
-        """Execute raw SQL on a fresh connection, bypassing the ORM session."""
-        from sqlalchemy.ext.asyncio import create_async_engine
-        from ..config import settings as _settings
-        eng = create_async_engine(_settings.async_database_url)
-        async def _run():
-            async with eng.connect() as conn:
-                await conn.execute(_text(sql), params)
-                await conn.commit()
-        import asyncio as _asyncio
-        try:
-            _asyncio.get_event_loop()
-            _asyncio.create_task(_run())
-        except RuntimeError:
-            pass
-
-    def _update_story_sync(sid, updates: dict):
-        for key, val in updates.items():
-            val_json = _json.dumps(val)
-            _raw_sql(
-                "UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid",
-                {"path": "{" + key + "}", "val": val_json, "id": sid},
-            )
-
-    def _update_status_sync(sid, status: str):
-        _raw_sql(
-            "UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid",
-            {"st": status, "id": sid},
-        )
+    def _set(story, updates: dict = None, **kwargs):
+        d = updates or kwargs
+        for k, v in d.items():
+            story.content[k] = v
 
     async with async_session() as db:
         story = await db.get(Story, _UUID(story_id))
@@ -365,11 +337,8 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         story.status = "generating"
         story.content = story.content or {}
         story.content.pop("error", None)
-        story.content["status_msg"] = "Starting..."
+        _set(story, status_msg="Fetching providers...")
         await db.commit()
-        # Also write via raw SQL to guarantee persistence
-        await _update_status_sync(story_id, "generating")
-        await _update_story_sync(story_id, {"status_msg": "Starting..."})
 
         providers_result = await db.execute(
             select(Provider).where(Provider.enabled.is_(True))
@@ -424,16 +393,18 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not prompt:
             err_msg = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
-            await _update_status_sync(story_id, "failed")
-            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "LLM failed"})
+            story.status = "failed"
+            await db.commit()
+            return
+            _set(story, {"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
         await db.commit()
-        await _update_story_sync(story_id, {"prompt": prompt})
+        _set(story, {"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
-        await _update_story_sync(story_id, {"status_msg": "Generating voiceover..."})
+        _set(story, {"status_msg": "Generating voiceover..."})
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -467,14 +438,16 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not tts_url:
             err_msg = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
-            await _update_status_sync(story_id, "failed")
-            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "TTS failed"})
+            story.status = "failed"
+            await db.commit()
+            return
+            _set(story, {"error": err_msg, "status_msg": "TTS failed"})
             return {"status": "error", "reason": err_msg}
 
-        await _update_story_sync(story_id, {"tts_url": tts_url})
+        _set(story, {"tts_url": tts_url})
 
         # --- Step 3: Render video ---
-        await _update_story_sync(story_id, {"status_msg": "Rendering video..."})
+        _set(story, {"status_msg": "Rendering video..."})
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -502,15 +475,20 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not video_url:
             err_msg = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
-            await _update_status_sync(story_id, "failed")
-            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "Video failed"})
+            story.status = "failed"
+            await db.commit()
+            return
+            _set(story, {"error": err_msg, "status_msg": "Video failed"})
             return {"status": "error", "reason": err_msg}
 
-        await _update_story_sync(story_id, {"video_url": video_url})
+        _set(story, {"video_url": video_url})
 
         # --- Step 4: Finalize ---
-        await _update_status_sync(story_id, "ready")
-        await _update_story_sync(story_id, {"status_msg": "Ready"})
+        story.status = "ready"
+        _set(story, status_msg="Ready")
+        await db.commit()
+        return {"status": "ok", "story_id": story_id, "video_url": video_url}
+        _set(story, {"status_msg": "Ready"})
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
