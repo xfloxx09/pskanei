@@ -1,10 +1,26 @@
 import os
+import re
+
 from pydantic_settings import BaseSettings
+
+
+def _as_async_postgres_url(raw: str) -> str:
+    if "postgresql+asyncpg" in raw or "postgresql+psycopg" in raw:
+        return raw
+    return re.sub(
+        r"^(postgres(?:ql)?)://",
+        r"\1+asyncpg://",
+        raw,
+    )
 
 
 class Settings(BaseSettings):
     # --- Database ---
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/viral_clip_studio"
+
+    @property
+    def async_database_url(self) -> str:
+        return _as_async_postgres_url(self.database_url)
 
     # --- Redis / Celery ---
     redis_url: str = "redis://localhost:6379/0"

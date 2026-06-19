@@ -1,21 +1,22 @@
 import asyncio
-from logging.config import fileConfig
+import os
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from app.config import _as_async_postgres_url
 from app.database import Base
-from app.models import Story, ScrapeSettings  # noqa: F401
+from app.models import Story, ScrapeSettings, Provider, PlatformAccount, PublishedClip  # noqa: F401
 
 config = context.config
-fileConfig(config.config_file_name)
-
 target_metadata = Base.metadata
 
 
 def run_migrations_offline():
-    url = config.get_main_option("sqlalchemy.url")
+    raw = config.get_main_option("sqlalchemy.url")
+    url = os.getenv("DATABASE_URL", raw)
+    url = _as_async_postgres_url(url)
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -33,8 +34,14 @@ def do_run_migrations(connection):
 
 
 async def run_async_migrations():
+    section = config.get_section(config.config_ini_section, {})
+    raw = section.get("sqlalchemy.url", "")
+    if raw:
+        section["sqlalchemy.url"] = _as_async_postgres_url(
+            os.getenv("DATABASE_URL", raw)
+        )
     connectable = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
