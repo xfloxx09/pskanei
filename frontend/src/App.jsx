@@ -47,6 +47,8 @@ const PROVIDER_DEFAULTS = [
   { id: 'p3', name: 'ElevenLabs', role: 'Voiceover (TTS)', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
   { id: 'p6', name: 'OpenAI TTS', role: 'Voiceover (TTS)', apiKey: '', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' },
   { id: 'p2', name: 'Creatomate', role: 'Video assembly', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://creatomate.com/dashboard/api-key' },
+  { id: 'p8', name: 'Shotstack', role: 'Video assembly', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://shotstack.io/dashboard' },
+  { id: 'p9', name: 'JSON2Video', role: 'Video assembly', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://json2video.com/dashboard' },
   { id: 'p4', name: 'HeyGen', role: 'AI avatar narration', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://app.heygen.com/settings' },
   { id: 'p7', name: 'Synthesia', role: 'AI avatar narration', apiKey: '', endpoint: 'https://api.synthesia.io', enabled: false, keyUrl: 'https://www.synthesia.io/settings' },
 ];

@@ -247,6 +247,8 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         ElevenLabsProvider,
         OpenAITTSProvider,
         CreatomateProvider,
+        ShotstackProvider,
+        JSON2VideoProvider,
         SynthesiaProvider,
     )
 
@@ -333,6 +335,8 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         # --- Step 3: Render video (try providers in order) ---
         video_providers = [
             ("p2", CreatomateProvider),
+            ("p8", ShotstackProvider),
+            ("p9", JSON2VideoProvider),
             ("p4", SynthesiaProvider),
             ("p7", SynthesiaProvider),
         ]

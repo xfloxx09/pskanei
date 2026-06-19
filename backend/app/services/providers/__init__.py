@@ -4,6 +4,8 @@ from .openai import OpenAIProvider
 from .elevenlabs import ElevenLabsProvider
 from .openai_tts import OpenAITTSProvider
 from .creatomate import CreatomateProvider
+from .shotstack import ShotstackProvider
+from .json2video import JSON2VideoProvider
 from .synthesia import SynthesiaProvider
 
 __all__ = [
@@ -15,5 +17,7 @@ __all__ = [
     "ElevenLabsProvider",
     "OpenAITTSProvider",
     "CreatomateProvider",
+    "ShotstackProvider",
+    "JSON2VideoProvider",
     "SynthesiaProvider",
 ]
