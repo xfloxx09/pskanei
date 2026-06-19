@@ -50,7 +50,13 @@ async def list_stories(
         await db.refresh(s)
         item = StoryOut.model_validate(s)
         _enrich_story_out(s, item)
-        out.append(item.model_dump())
+        d = item.model_dump()
+        # Force ai_curation into response if enrichment set it
+        if item.ai_curation:
+            d["ai_curation"] = item.ai_curation
+        out.append(d)
+    # Debug: count how many have ai_curation
+    tagged = sum(1 for o in out if o.get("ai_curation"))
     return out
 
 
