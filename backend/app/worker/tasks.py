@@ -55,6 +55,8 @@ async def _mark_failed(story_id: str, error: str):
 
 async def _run_scrape_pipeline():
     import os
+    import uuid
+    from datetime import datetime, timezone, timedelta
 
     os.environ.setdefault("ENVIRONMENT", "production")
 
@@ -160,7 +162,71 @@ async def _run_scrape_pipeline():
 
         await db.commit()
 
-        return {"status": "ok", "stories_saved": saved, "source_counts": source_counts, "source_errors": source_errors}
+        # --- AI curation (requires DeepSeek key) ---
+        curated = 0
+        try:
+            from ..models.provider import Provider
+            from ..services.crypto import decrypt
+            from ..services.curator import curate_stories
+
+            provider_row = await db.get(Provider, "p1")
+            deepseek_key = ""
+            if provider_row and provider_row.enabled and provider_row.api_key_encrypted:
+                try:
+                    deepseek_key = decrypt(provider_row.api_key_encrypted)
+                except Exception:
+                    pass
+
+            if deepseek_key:
+                story_batch = [
+                    {
+                        "id": str(new_story.id),
+                        "title": new_story.title,
+                        "score": new_story.score,
+                        "source": new_story.source,
+                    }
+                    for new_story in (
+                        await db.execute(
+                            select(Story)
+                            .where(Story.spotted_at >= datetime.now(timezone.utc) - timedelta(minutes=5))
+                            .order_by(Story.score.desc())
+                            .limit(30)
+                        )
+                    ).scalars().all()
+                ]
+
+                if story_batch:
+                    result = await curate_stories(story_batch, deepseek_key)
+                    analyses = {a["id"]: a for a in result.get("analyses", [])}
+                    top_ids = set(result.get("top_pick_ids", []))
+
+                    for sid, analysis in analyses.items():
+                        try:
+                            story_obj = await db.get(Story, uuid.UUID(sid))
+                            if story_obj:
+                                story_obj.content = story_obj.content or {}
+                                story_obj.content["ai_curation"] = {
+                                    "category": analysis.get("category", ""),
+                                    "viral_score": analysis.get("viral_score", 0),
+                                    "hook_angle": analysis.get("hook_angle", ""),
+                                    "reasoning": analysis.get("reasoning", ""),
+                                    "is_top_pick": sid in top_ids,
+                                }
+                                curated += 1
+                        except (ValueError, TypeError):
+                            pass
+
+                    await db.commit()
+        except Exception:
+            pass
+
+        return {
+            "status": "ok",
+            "stories_saved": saved,
+            "ai_curated": curated,
+            "source_counts": source_counts,
+            "source_errors": source_errors,
+        }
 
 
 async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):

@@ -55,13 +55,43 @@ const PLATFORM_DEFAULTS = [
   { id: 'facebook', name: 'Facebook Reels', connected: false, dailyCap: 10, enabled: true },
 ];
 
-function ScoreBadge({ score }) {
+function ScoreBadge({ score, aiScore, isTopPick }) {
   const tone = score >= 85 ? 'bg-emerald-950 text-emerald-300 border-emerald-800'
     : score >= 70 ? 'bg-amber-950 text-amber-300 border-amber-800'
     : 'bg-zinc-800 text-zinc-400 border-zinc-700';
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-mono ${tone}`}>
-      <TrendingUp className="h-3 w-3" /> {score}
+    <div className="flex items-center gap-1.5">
+      <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-mono ${tone} ${isTopPick ? 'ring-1 ring-amber-400' : ''}`}>
+        <TrendingUp className="h-3 w-3" /> {score}
+      </span>
+      {aiScore != null && (
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-mono ${
+          aiScore >= 80 ? 'bg-purple-950 text-purple-300 border-purple-800' :
+          aiScore >= 60 ? 'bg-sky-950 text-sky-300 border-sky-800' :
+          'bg-zinc-800 text-zinc-400 border-zinc-700'
+        }`}>
+          <Sparkles className="h-3 w-3" /> {aiScore}
+        </span>
+      )}
+      {isTopPick && <span className="text-amber-400 text-xs" title="AI Top Pick">&#9733;</span>}
+    </div>
+  );
+}
+
+function CategoryBadge({ category }) {
+  if (!category) return null;
+  const colors = {
+    finance: 'bg-green-950 text-green-300 border-green-800',
+    tech: 'bg-blue-950 text-blue-300 border-blue-800',
+    politics: 'bg-red-950 text-red-300 border-red-800',
+    entertainment: 'bg-pink-950 text-pink-300 border-pink-800',
+    science: 'bg-cyan-950 text-cyan-300 border-cyan-800',
+    sports: 'bg-orange-950 text-orange-300 border-orange-800',
+    weird: 'bg-yellow-950 text-yellow-300 border-yellow-800',
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${colors[category] || 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+      {category}
     </span>
   );
 }
@@ -354,7 +384,8 @@ export default function ViralClipStudioAdmin() {
         const info = [countStr, errStr].filter(Boolean).join(' | ');
         showToast(`${detail?.reason || 'Scrape skipped'}${info ? ` (${info})` : ''}`, 10000);
       } else if (saved > 0) {
-        showToast(`${saved} stories found`, 5000);
+        const curated = detail?.ai_curated || 0;
+        showToast(`${saved} stories found${curated ? `, ${curated} AI-curated` : ''}`, 5000);
       } else {
         const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
         showToast(`No stories found${errStr ? ' — ' + errStr : ''}`, 10000);
@@ -465,8 +496,9 @@ export default function ViralClipStudioAdmin() {
                   )}
                   {queue.map((q) => (
                     <div key={q.id} className="flex items-center gap-3 py-2.5 text-sm">
-                      <ScoreBadge score={q.score} />
+                      <ScoreBadge score={q.score} aiScore={q.ai_curation?.viral_score} isTopPick={q.ai_curation?.is_top_pick} />
                       <span className="flex-1 truncate text-zinc-300">{q.title}</span>
+                      <CategoryBadge category={q.ai_curation?.category} />
                       <span className="text-xs text-zinc-500">{fmtWhen(q.spotted_at)}</span>
                       <StatusBadge status={q.status} />
                     </div>
@@ -771,7 +803,7 @@ export default function ViralClipStudioAdmin() {
                   )}
                   {queue.map((q) => (
                     <div key={q.id} className="flex items-center gap-4 p-4">
-                      <ScoreBadge score={q.score} />
+                      <ScoreBadge score={q.score} aiScore={q.ai_curation?.viral_score} isTopPick={q.ai_curation?.is_top_pick} />
                       <div className="flex-1">
                         <div className="text-sm text-zinc-200">{q.title}</div>
                         <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
@@ -782,6 +814,7 @@ export default function ViralClipStudioAdmin() {
                           <span>{fmtWhen(q.spotted_at)}</span>
                         </div>
                       </div>
+                      <CategoryBadge category={q.ai_curation?.category} />
                       <StatusBadge status={q.status} />
                       {q.status === 'pending' && (
                         <div className="flex gap-2">

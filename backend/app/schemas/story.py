@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class StoryOut(BaseModel):
@@ -16,10 +16,16 @@ class StoryOut(BaseModel):
     time_window: str
     status: str
     spotted_at: datetime
+    ai_curation: dict | None = None
 
     model_config = {"from_attributes": True}
 
-
-class StoryList(BaseModel):
-    stories: list[StoryOut]
-    total: int
+    @model_validator(mode="before")
+    @classmethod
+    def extract_ai(cls, data):
+        if hasattr(data, "content"):
+            c = getattr(data, "content", None) or {}
+            if isinstance(c, dict) and "ai_curation" in c:
+                data = dict(data.__dict__) if hasattr(data, "__dict__") else data
+                data["ai_curation"] = c["ai_curation"]
+        return data
