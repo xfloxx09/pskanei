@@ -938,7 +938,8 @@ export default function ViralClipStudioAdmin() {
                     setLoading(true);
                     try {
                       const res = await fetchJSON(`${API}/queue/curate`, { method: 'POST' });
-                      showToast(`AI analyzed ${res.analyzed} stories. Top picks: ${res.top_pick_ids.length}`);
+                      const errs = (res.errors || []).slice(0, 3).join(', ');
+                      showToast(`${res.analyzed}/${res.total} tagged. ${res.top_pick_ids?.length || 0} picks. ${errs ? 'Errors: ' + errs : ''}`, 15000);
                       loadQueue();
                     } catch (e) { showToast(`Curate failed: ${e.message}`); }
                     finally { setLoading(false); }
