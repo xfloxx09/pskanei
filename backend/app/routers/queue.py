@@ -40,13 +40,17 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     if story.status != "pending":
         raise HTTPException(409, f"Story is not pending (currently {story.status})")
 
-    from ..worker.tasks import create_pipeline
-
     story.status = "generating"
     await db.commit()
     await db.refresh(story)
 
-    create_pipeline.delay(str(story_id))
+    try:
+        from ..worker.tasks import create_pipeline
+        create_pipeline.delay(str(story_id))
+    except Exception:
+        from ..worker.tasks import _run_create_pipeline
+        import asyncio
+        asyncio.create_task(_run_create_pipeline(str(story_id)))
 
     return {"success": True, "story": StoryOut.model_validate(story)}
 
@@ -81,6 +85,11 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     story.content.pop("error", None)
     await db.commit()
 
-    retry_failed_story.delay(str(story_id))
+    try:
+        retry_failed_story.delay(str(story_id))
+    except Exception:
+        from ..worker.tasks import _run_create_pipeline
+        import asyncio
+        asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
 
     return {"success": True, "story": StoryOut.model_validate(story)}

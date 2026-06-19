@@ -84,7 +84,12 @@ async def publish_now(body: PublishRequest, db: AsyncSession = Depends(get_db)):
         )
         db.add(clip)
         await db.flush()
-        publish_clip.delay(str(clip.id))
+        try:
+            publish_clip.delay(str(clip.id))
+        except Exception:
+            from ..worker.tasks import _run_publish_clip
+            import asyncio
+            asyncio.create_task(_run_publish_clip(str(clip.id)))
 
     await db.commit()
 
@@ -117,7 +122,12 @@ async def publish_story(
         )
         db.add(clip)
         await db.flush()
-        publish_clip.delay(str(clip.id))
+        try:
+            publish_clip.delay(str(clip.id))
+        except Exception:
+            from ..worker.tasks import _run_publish_clip
+            import asyncio
+            asyncio.create_task(_run_publish_clip(str(clip.id)))
 
     story.status = "published"
     await db.commit()

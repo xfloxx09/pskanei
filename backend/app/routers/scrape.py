@@ -60,7 +60,12 @@ async def update_settings(body: ScrapeSettingsIn, db: AsyncSession = Depends(get
 
 @router.post("/trigger")
 async def trigger_scrape():
-    from ..worker.tasks import scrape_and_score
-
-    result = scrape_and_score.delay()
-    return {"success": True, "job_id": result.id}
+    # Try Celery first; if no Redis, run synchronously
+    try:
+        from ..worker.tasks import scrape_and_score
+        result = scrape_and_score.delay()
+        return {"success": True, "job_id": result.id, "mode": "celery"}
+    except Exception as e:
+        from ..worker.tasks import _run_scrape_pipeline
+        data = await _run_scrape_pipeline()
+        return {"success": True, "mode": "sync", "detail": data}
