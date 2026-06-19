@@ -149,7 +149,7 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Story)
         .order_by(Story.score.desc())
-        .limit(50)
+        .limit(100)
     )
     stories = result.scalars().all()
 

@@ -54,7 +54,7 @@ async def curate_stories(
         ],
         "response_format": {"type": "json_object"},
         "temperature": 0.7,
-        "max_tokens": 8000,
+        "max_tokens": 16000,
     }
 
     headers = {
