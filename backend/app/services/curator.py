@@ -51,15 +51,19 @@ async def curate_stories(
 
     story_text = "\n".join(
         f'[id:{s["id"]}] score:{s.get("score",0)} source:{s.get("source","")} | {s["title"]}'
-        + (f'\n  Article: {s.get("content","")[:500]}' if s.get("content") else '')
+        + (f'\n  Article: {s.get("content","")[:400]}' if s.get("content") else '')
         for s in stories
     )
+
+    ids = [s["id"] for s in stories]
+    id_list = ", ".join(ids)
+    count = len(ids)
 
     payload = {
         "model": "deepseek-chat",
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Analyze these scraped news stories for viral potential:\n\n{story_text}"},
+            {"role": "user", "content": f"Here are {count} news stories. You MUST return an analysis for EVERY ONE. Required IDs: {id_list}\n\n{story_text}\n\nIMPORTANT: Your response must contain exactly {count} analyses, one for each of these IDs: {id_list}. Do not skip any story. Even if a story has low viral potential, include it with a low score."},
         ],
         "response_format": {"type": "json_object"},
         "temperature": 0.7,

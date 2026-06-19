@@ -233,6 +233,18 @@ async def _run_scrape_pipeline():
                         except Exception:
                             continue
 
+                    # Retry missed stories individually
+                    missing_ids = set(s["id"] for s in story_batch) - set(all_analyses.keys())
+                    for mid in missing_ids:
+                        ms = next((s for s in story_batch if s["id"] == mid), None)
+                        if ms:
+                            try:
+                                result = await curate_stories([ms], deepseek_key)
+                                for a in result.get("analyses", []):
+                                    all_analyses[a["id"]] = a
+                            except Exception:
+                                pass
+
                     for sid, analysis in all_analyses.items():
                         try:
                             story_obj = await db.get(Story, uuid.UUID(sid))

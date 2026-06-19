@@ -248,7 +248,17 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
                 all_analyses[a["id"]] = a
             all_top_ids.update(curation.get("top_pick_ids", []))
         except Exception as e:
-            raise HTTPException(502, f"DeepSeek API error on batch {i//15 + 1}: {str(e)}")
+            raise HTTPException(502, f"DeepSeek API error on batch {i//10 + 1}: {str(e)}")
+
+    # Retry individually for any stories DeepSeek skipped
+    missing = [s for s in batch if s["id"] not in all_analyses]
+    for s in missing:
+        try:
+            curation = await curate_stories([s], deepseek_key, custom_prompt=custom_prompt)
+            for a in curation.get("analyses", []):
+                all_analyses[a["id"]] = a
+        except Exception:
+            pass
 
     analyses = all_analyses
     top_ids = all_top_ids
