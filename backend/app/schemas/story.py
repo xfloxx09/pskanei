@@ -26,6 +26,12 @@ class StoryOut(BaseModel):
         if hasattr(data, "content"):
             c = getattr(data, "content", None) or {}
             if isinstance(c, dict) and "ai_curation" in c:
-                data = dict(data.__dict__) if hasattr(data, "__dict__") else data
-                data["ai_curation"] = c["ai_curation"]
+                result = dict(data.__dict__) if hasattr(data, "__dict__") else {}
+                result["ai_curation"] = c["ai_curation"]
+                return result
         return data
+
+
+class StoryList(BaseModel):
+    stories: list[StoryOut]
+    total: int

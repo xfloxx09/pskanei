@@ -114,7 +114,9 @@ class RedditScraper(BaseScraper):
 
         if not stories:
             preview = f"base={base_url}"
-            if errors:
+            if errors and '403' in str(errors):
+                preview += " | Reddit requires OAuth. Add Reddit Client ID + Secret in Scrape tab > API Keys"
+            elif errors:
                 preview += " | " + "; ".join(errors)
             raise RuntimeError(preview)
 
