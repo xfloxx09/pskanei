@@ -111,6 +111,9 @@ async def debug_scrape(source_id: str):
         }
     except Exception as e:
         return {"source": source_id, "error": str(e)}
+
+
+@router.post("/trigger")
 async def trigger_scrape():
     try:
         from ..worker.tasks import scrape_and_score
