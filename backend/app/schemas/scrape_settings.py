@@ -11,15 +11,17 @@ class SourceItem(BaseModel):
 
 
 class ScrapeSettingsIn(BaseModel):
-    window: str  # "1h", "6h", "12h", "24h", "3d"
-    frequency: str  # "15", "30", "60"
+    window: str
+    frequency: str
     sources: list[SourceItem]
+    scraper_keys: dict[str, str] = {}
 
 
 class ScrapeSettingsOut(BaseModel):
     window: str
     frequency: str
     sources: list[SourceItem]
+    scraper_keys: dict[str, str] = {}
     updated_at: datetime
 
     model_config = {"from_attributes": True}

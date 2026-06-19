@@ -121,6 +121,7 @@ export default function ViralClipStudioAdmin() {
   const [scrapeWindow, setScrapeWindow] = useState('6h');
   const [frequency, setFrequency] = useState('30');
   const [sources, setSources] = useState(SOURCE_DEFAULTS);
+  const [scraperKeys, setScraperKeys] = useState({});
   const [providers, setProviders] = useState(PROVIDER_DEFAULTS);
   const [visibleKeys, setVisibleKeys] = useState({});
   const [dailyBudget, setDailyBudget] = useState(15);
@@ -166,6 +167,7 @@ export default function ViralClipStudioAdmin() {
       if (data.window) setScrapeWindow(data.window);
       if (data.frequency) setFrequency(data.frequency);
       if (data.sources?.length) setSources(data.sources);
+      if (data.scraper_keys) setScraperKeys(data.scraper_keys);
     } catch { /* offline */ }
   }, []);
 
@@ -222,7 +224,7 @@ export default function ViralClipStudioAdmin() {
       await fetchJSON(`${API}/scrape/settings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ window: scrapeWindow, frequency, sources }),
+        body: JSON.stringify({ window: scrapeWindow, frequency, sources, scraper_keys: scraperKeys }),
       });
       showToast('Scrape settings saved');
     } catch (e) {
@@ -516,6 +518,37 @@ export default function ViralClipStudioAdmin() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <div className="mb-3 text-sm font-medium text-zinc-200">API Keys</div>
+                <p className="mb-3 text-xs text-zinc-500">Keys are encrypted at rest. Only needed for NewsAPI and YouTube sources.</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <KeyRound className="h-3 w-3" /> NewsAPI key
+                    </label>
+                    <input
+                      type="password"
+                      value={scraperKeys.newsapi || ''}
+                      onChange={(e) => setScraperKeys(prev => ({ ...prev, newsapi: e.target.value }))}
+                      placeholder="API key for newsapi.org"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <KeyRound className="h-3 w-3" /> YouTube API key
+                    </label>
+                    <input
+                      type="password"
+                      value={scraperKeys.youtube || ''}
+                      onChange={(e) => setScraperKeys(prev => ({ ...prev, youtube: e.target.value }))}
+                      placeholder="Google Cloud API key"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-200"
+                    />
+                  </div>
                 </div>
               </Card>
 

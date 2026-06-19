@@ -11,12 +11,19 @@ NEWSAPI_URL = "https://newsapi.org/v2/top-headlines"
 class NewsAPIScraper(BaseScraper):
     source_id = "newsapi"
 
+    def __init__(self, api_key: str = ""):
+        self._api_key = api_key
+
+    @property
+    def api_key(self) -> str:
+        return self._api_key or settings.newsapi_key
+
     async def fetch(self, time_window: str) -> list[RawStory]:
-        if not settings.newsapi_key:
+        if not self.api_key:
             return []
 
         params = {
-            "apiKey": settings.newsapi_key,
+            "apiKey": self.api_key,
             "language": "en",
             "pageSize": 100,
         }

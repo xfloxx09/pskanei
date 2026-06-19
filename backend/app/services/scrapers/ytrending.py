@@ -11,8 +11,15 @@ YOUTUBE_API = "https://www.googleapis.com/youtube/v3/videos"
 class YouTubeTrendingScraper(BaseScraper):
     source_id = "ytrending"
 
+    def __init__(self, api_key: str = ""):
+        self._api_key = api_key
+
+    @property
+    def api_key(self) -> str:
+        return self._api_key or settings.youtube_api_key
+
     async def fetch(self, time_window: str) -> list[RawStory]:
-        if not settings.youtube_api_key:
+        if not self.api_key:
             return []
 
         params = {
@@ -20,7 +27,7 @@ class YouTubeTrendingScraper(BaseScraper):
             "chart": "mostPopular",
             "regionCode": "US",
             "maxResults": 50,
-            "key": settings.youtube_api_key,
+            "key": self.api_key,
         }
 
         async with httpx.AsyncClient(timeout=30) as client:

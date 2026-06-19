@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..database import get_db
 from ..models.scrape_settings import ScrapeSettings
 from ..schemas.scrape_settings import ScrapeSettingsIn, ScrapeSettingsOut, SourceItem
+from ..services.crypto import encrypt, decrypt, mask_key
 
 router = APIRouter(prefix="/api/scrape", tags=["scrape"])
 
@@ -36,6 +37,20 @@ async def _get_or_create_settings(db: AsyncSession) -> ScrapeSettings:
     return settings
 
 
+def _masked_keys(encrypted_keys: dict) -> dict[str, str]:
+    out = {}
+    for k, v in encrypted_keys.items():
+        if v:
+            try:
+                decrypted = decrypt(v)
+                out[k] = mask_key(decrypted)
+            except Exception:
+                out[k] = ""
+        else:
+            out[k] = ""
+    return out
+
+
 @router.get("/settings", response_model=ScrapeSettingsOut)
 async def get_settings(db: AsyncSession = Depends(get_db)):
     settings = await _get_or_create_settings(db)
@@ -43,6 +58,7 @@ async def get_settings(db: AsyncSession = Depends(get_db)):
         window=settings.time_window,
         frequency=str(settings.frequency_minutes),
         sources=[SourceItem(**s) for s in settings.sources],
+        scraper_keys=_masked_keys(settings.scraper_keys or {}),
         updated_at=settings.updated_at,
     )
 
@@ -53,6 +69,15 @@ async def update_settings(body: ScrapeSettingsIn, db: AsyncSession = Depends(get
     settings.time_window = body.window
     settings.frequency_minutes = int(body.frequency)
     settings.sources = [s.model_dump() for s in body.sources]
+
+    new_keys = {}
+    for k, v in body.scraper_keys.items():
+        if v and not v.startswith("****"):
+            new_keys[k] = encrypt(v)
+        elif k in (settings.scraper_keys or {}):
+            new_keys[k] = settings.scraper_keys[k]
+    settings.scraper_keys = new_keys
+
     settings.updated_at = datetime.now(timezone.utc)
     await db.commit()
     return {"success": True}

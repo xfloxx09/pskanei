@@ -63,6 +63,7 @@ async def _run_scrape_pipeline():
     from ..database import async_session
     from ..models.scrape_settings import ScrapeSettings
     from ..models.story import Story
+    from ..services.crypto import decrypt
     from ..services.scrapers import (
         GDELTScraper,
         RedditScraper,
@@ -73,14 +74,6 @@ async def _run_scrape_pipeline():
     from ..services.deduplicator import deduplicate
     from ..services.scorer import score_stories
 
-    SCRAPER_MAP = {
-        "gdelt": GDELTScraper(),
-        "reddit": RedditScraper(),
-        "newsapi": NewsAPIScraper(),
-        "gtrends": GoogleTrendsScraper(),
-        "ytrending": YouTubeTrendingScraper(),
-    }
-
     async with async_session() as db:
         result = await db.execute(
             select(ScrapeSettings).where(ScrapeSettings.id == 1)
@@ -88,6 +81,23 @@ async def _run_scrape_pipeline():
         settings = result.scalar_one_or_none()
         if settings is None:
             return {"status": "skipped", "reason": "no settings"}
+
+        scraper_keys = settings.scraper_keys or {}
+        decrypted_keys = {}
+        for k, v in scraper_keys.items():
+            if v:
+                try:
+                    decrypted_keys[k] = decrypt(v)
+                except Exception:
+                    pass
+
+        SCRAPER_MAP = {
+            "gdelt": GDELTScraper(),
+            "reddit": RedditScraper(),
+            "newsapi": NewsAPIScraper(api_key=decrypted_keys.get("newsapi", "")),
+            "gtrends": GoogleTrendsScraper(),
+            "ytrending": YouTubeTrendingScraper(api_key=decrypted_keys.get("youtube", "")),
+        }
 
         time_window = settings.time_window
         enabled_sources = [
