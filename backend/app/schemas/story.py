@@ -35,3 +35,7 @@ class StoryOut(BaseModel):
 class StoryList(BaseModel):
     stories: list[StoryOut]
     total: int
+
+
+class StoryDetail(StoryOut):
+    content: dict | None = None

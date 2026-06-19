@@ -162,6 +162,7 @@ export default function ViralClipStudioAdmin() {
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
+  const [previewStory, setPreviewStory] = useState(null);
 
   const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
@@ -847,6 +848,16 @@ export default function ViralClipStudioAdmin() {
                       </div>
                       <CategoryBadge category={q.ai_curation?.category} />
                       <StatusBadge status={q.status} />
+                      {(q.status === 'ready' || q.status === 'published' || q.status === 'generating' || q.status === 'failed') && (
+                        <button onClick={async () => {
+                          try {
+                            const full = await fetchJSON(`${API}/queue/${q.id}`);
+                            setPreviewStory(full);
+                          } catch (e) { showToast(`Error: ${e.message}`); }
+                        }} className="flex items-center gap-1 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400 hover:text-zinc-200">
+                          <Eye className="h-3 w-3" /> Preview
+                        </button>
+                      )}
                       {q.status === 'pending' && (
                         <div className="flex gap-2">
                           <button onClick={() => approveStory(q.id)} className="flex items-center gap-1 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-emerald-950 hover:bg-emerald-400">
@@ -911,6 +922,111 @@ export default function ViralClipStudioAdmin() {
           )}
         </div>
       </div>
+
+      {/* Preview Modal */}
+      {previewStory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPreviewStory(null)}>
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-zinc-100">Story Preview</h2>
+              <button onClick={() => setPreviewStory(null)} className="text-zinc-500 hover:text-zinc-200"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="space-y-4 text-sm">
+              <div>
+                <div className="text-xs text-zinc-500 mb-1">Title</div>
+                <div className="text-zinc-200">{previewStory.title}</div>
+              </div>
+
+              {previewStory.url && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Source</div>
+                  <a href={previewStory.url} target="_blank" rel="noreferrer" className="text-amber-400 hover:underline break-all">{previewStory.url}</a>
+                </div>
+              )}
+
+              {previewStory.ai_curation && (
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-950">
+                  <div>
+                    <div className="text-xs text-zinc-500">AI Category</div>
+                    <div className="text-zinc-200 capitalize">{previewStory.ai_curation.category || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-500">AI Viral Score</div>
+                    <div className="text-purple-300">{previewStory.ai_curation.viral_score || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-zinc-500">Top Pick</div>
+                    <div className={previewStory.ai_curation.is_top_pick ? 'text-amber-400' : 'text-zinc-500'}>{previewStory.ai_curation.is_top_pick ? 'Yes ★' : 'No'}</div>
+                  </div>
+                  {previewStory.ai_curation.hook_angle && (
+                    <div className="col-span-3">
+                      <div className="text-xs text-zinc-500">Hook Angle</div>
+                      <div className="text-zinc-200">{previewStory.ai_curation.hook_angle}</div>
+                    </div>
+                  )}
+                  {previewStory.ai_curation.reasoning && (
+                    <div className="col-span-3">
+                      <div className="text-xs text-zinc-500">AI Reasoning</div>
+                      <div className="text-zinc-400">{previewStory.ai_curation.reasoning}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {previewStory.content?.error && (
+                <div className="p-3 rounded-lg bg-rose-950 border border-rose-800">
+                  <div className="text-xs text-rose-400 mb-1">Error</div>
+                  <div className="text-rose-300 text-xs">{previewStory.content.error}</div>
+                </div>
+              )}
+
+              {previewStory.content?.prompt && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Generated Prompt (DeepSeek)</div>
+                  <div className="p-3 rounded-lg bg-zinc-950 max-h-60 overflow-y-auto">
+                    <div className="text-xs text-zinc-400 mb-2">Visual Description</div>
+                    <div className="text-zinc-300">{previewStory.content.prompt?.visual_description || '—'}</div>
+                    <div className="text-xs text-zinc-400 mb-2 mt-3">Voiceover Script</div>
+                    <div className="text-zinc-300">{previewStory.content.prompt?.voiceover_script || '—'}</div>
+                    <div className="text-xs text-zinc-400 mb-2 mt-3">Hook Text</div>
+                    <div className="text-amber-300 font-medium">{previewStory.content.prompt?.hook_text || '—'}</div>
+                  </div>
+                </div>
+              )}
+
+              {previewStory.content?.tts_url && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Voiceover Audio</div>
+                  <div className="text-zinc-400 font-mono text-xs break-all">{previewStory.content.tts_url}</div>
+                </div>
+              )}
+
+              {previewStory.content?.video_url && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Rendered Video</div>
+                  <a href={previewStory.content.video_url} target="_blank" rel="noreferrer" className="text-amber-400 hover:underline break-all">{previewStory.content.video_url}</a>
+                </div>
+              )}
+
+              {previewStory.content?.prompt?.captions && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Platform Captions</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {Object.entries(previewStory.content.prompt.captions || {}).map(([k, v]) => (
+                      <div key={k} className="p-2 rounded bg-zinc-950">
+                        <div className="text-xs text-zinc-500 capitalize mb-1">{k}</div>
+                        <div className="text-zinc-300 text-xs">{v?.text || '—'}</div>
+                        <div className="text-zinc-500 text-xs mt-1">{v?.hashtags?.join(' ') || ''}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

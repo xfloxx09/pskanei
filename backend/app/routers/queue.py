@@ -115,6 +115,15 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"success": True, "story": StoryOut.model_validate(story)}
 
 
+@router.get("/{story_id}")
+async def get_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    from ..schemas.story import StoryDetail
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    return StoryDetail.model_validate(story)
+
+
 @router.delete("")
 async def clear_queue(
     status: str | None = Query(None, description="Only delete stories with this status"),
