@@ -102,7 +102,7 @@ function CategoryBadge({ category }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, statusMsg }) {
   const map = {
     pending: 'bg-zinc-800 text-zinc-300 border-zinc-700',
     generating: 'bg-sky-950 text-sky-300 border-sky-800',
@@ -112,9 +112,10 @@ function StatusBadge({ status }) {
     failed: 'bg-rose-950 text-rose-300 border-rose-800',
     scheduled: 'bg-amber-950 text-amber-300 border-amber-800',
   };
+  const label = status === 'generating' && statusMsg ? statusMsg : status;
   return (
     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${map[status] || map.pending}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -515,7 +516,7 @@ export default function ViralClipStudioAdmin() {
                       <span className="flex-1 truncate text-zinc-300">{q.title}</span>
                       <CategoryBadge category={q.ai_curation?.category} />
                       <span className="text-xs text-zinc-500">{fmtWhen(q.spotted_at)}</span>
-                      <StatusBadge status={q.status} />
+                      <StatusBadge status={q.status} statusMsg={q.status_msg} />
                     </div>
                   ))}
                 </div>
@@ -911,7 +912,7 @@ export default function ViralClipStudioAdmin() {
                         </div>
                       </div>
                       <CategoryBadge category={q.ai_curation?.category} />
-                      <StatusBadge status={q.status} />
+                      <StatusBadge status={q.status} statusMsg={q.status_msg} />
                       {(q.status === 'ready' || q.status === 'published' || q.status === 'generating' || q.status === 'failed') && (
                         <button onClick={async () => {
                           try {

@@ -17,6 +17,7 @@ class StoryOut(BaseModel):
     status: str
     spotted_at: datetime
     ai_curation: dict | None = None
+    status_msg: str = ""
 
     model_config = {"from_attributes": True}
 
@@ -25,9 +26,12 @@ class StoryOut(BaseModel):
     def extract_ai(cls, data):
         if hasattr(data, "content"):
             c = getattr(data, "content", None) or {}
-            if isinstance(c, dict) and "ai_curation" in c:
-                result = dict(data.__dict__) if hasattr(data, "__dict__") else {}
-                result["ai_curation"] = c["ai_curation"]
+            result = dict(data.__dict__) if hasattr(data, "__dict__") else {}
+            if isinstance(c, dict):
+                if "ai_curation" in c:
+                    result["ai_curation"] = c["ai_curation"]
+                if "status_msg" in c:
+                    result["status_msg"] = c["status_msg"]
                 return result
         return data
 

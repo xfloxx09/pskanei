@@ -267,6 +267,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         story.status = "generating"
         story.content = story.content or {}
         story.content.pop("error", None)
+        story.content["status_msg"] = "Starting..."
         await db.commit()
 
         providers_result = await db.execute(
@@ -281,6 +282,8 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
             return ""
 
         # --- Step 1: Generate prompt (any enabled LLM with a key) ---
+        story.content["status_msg"] = "Generating AI prompt..."
+        await db.commit()
         llm_classes = [
             ("Prompt generation", DeepSeekProvider),
             ("Prompt generation", OpenAIProvider),
@@ -311,7 +314,9 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         story.content["prompt"] = prompt
         await db.commit()
 
-        # --- Step 2: Generate TTS (any enabled TTS with a key, or Edge TTS for free) ---
+        # --- Step 2: Generate TTS ---
+        story.content["status_msg"] = "Generating voiceover..."
+        await db.commit()
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -350,7 +355,9 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         story.content["tts_url"] = tts_url
         await db.commit()
 
-        # --- Step 3: Render video (any enabled video/avatar provider with a key) ---
+        # --- Step 3: Render video ---
+        story.content["status_msg"] = "Rendering video..."
+        await db.commit()
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -385,6 +392,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
 
         # --- Step 4: Finalize ---
         story.status = "ready"
+        story.content["status_msg"] = "Ready"
         await db.commit()
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
