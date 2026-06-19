@@ -970,6 +970,7 @@ export default function ViralClipStudioAdmin() {
                       ))}
                     </div>
                   )}
+                  <div className="mt-2 text-xs text-zinc-500">First story raw: {JSON.stringify(queue[0]?.ai_curation).substring(0, 200)}</div>
                 </Card>
               )}
 
