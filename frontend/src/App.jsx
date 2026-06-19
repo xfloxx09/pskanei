@@ -112,9 +112,9 @@ function StatusBadge({ status, statusMsg }) {
     failed: 'bg-rose-950 text-rose-300 border-rose-800',
     scheduled: 'bg-amber-950 text-amber-300 border-amber-800',
   };
-  const label = status === 'generating' && statusMsg ? statusMsg : status;
+  const label = (status === 'generating' || status === 'failed') && statusMsg ? statusMsg : status;
   return (
-    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${map[status] || map.pending}`}>
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs capitalize ${map[status] || map.pending}`} title={statusMsg}>
       {label}
     </span>
   );

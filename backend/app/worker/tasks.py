@@ -47,6 +47,7 @@ async def _mark_failed(story_id: str, error: str):
             story.status = "failed"
             story.content = story.content or {}
             story.content["error"] = error
+            story.content["status_msg"] = error[:80]
             await db.commit()
 
 
@@ -307,6 +308,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
 
         if not prompt:
             story.content["error"] = "No enabled LLM provider with valid API key"
+            story.content["status_msg"] = "No LLM"
             story.status = "failed"
             await db.commit()
             raise RuntimeError(story.content["error"])
@@ -348,6 +350,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
 
         if not tts_url:
             story.content["error"] = "No enabled TTS provider with valid API key"
+            story.content["status_msg"] = "TTS failed"
             story.status = "failed"
             await db.commit()
             raise RuntimeError(story.content["error"])
@@ -383,6 +386,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
 
         if not video_url:
             story.content["error"] = "No enabled video/avatar provider with valid API key"
+            story.content["status_msg"] = "Video failed"
             story.status = "failed"
             await db.commit()
             raise RuntimeError(story.content["error"])
