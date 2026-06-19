@@ -32,6 +32,7 @@ class StoryOut(BaseModel):
                     result["ai_curation"] = c["ai_curation"]
                 if "status_msg" in c:
                     result["status_msg"] = c["status_msg"]
+                result["content"] = c
                 return result
         return data
 
