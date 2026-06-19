@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard, Radar, Sparkles, Share2, ListChecks, CalendarClock,
   Plus, Trash2, Check, X, Clock, TrendingUp, KeyRound, Wifi, WifiOff,
-  RefreshCw, DollarSign, AlertCircle, Eye, EyeOff,
+  RefreshCw, DollarSign, AlertCircle, Eye, EyeOff, ExternalLink,
 } from 'lucide-react';
 
 const API = '/api';
@@ -829,7 +829,14 @@ export default function ViralClipStudioAdmin() {
                     <div key={q.id} className="flex items-center gap-4 p-4">
                       <ScoreBadge score={q.score} aiScore={q.ai_curation?.viral_score} isTopPick={q.ai_curation?.is_top_pick} />
                       <div className="flex-1">
-                        <div className="text-sm text-zinc-200">{q.title}</div>
+                        <div className="flex items-center gap-1.5 text-sm text-zinc-200">
+                          <span className="truncate">{q.title}</span>
+                          {q.url && (
+                            <a href={q.url} target="_blank" rel="noreferrer" className="shrink-0 text-zinc-500 hover:text-zinc-300" title="Open source">
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
                         <div className="mt-1 flex items-center gap-2 text-xs text-zinc-500">
                           <span className="font-mono">{q.source}</span>
                           <span>·</span>
