@@ -229,11 +229,8 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         for s in stories
     ]
 
-    # Batch into groups of 15 to avoid DeepSeek truncation
     all_analyses = {}
-    all_top_ids = set()
 
-    # Load custom curator prompt
     custom_prompt = ""
     s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
     s_obj = s_result.scalar_one_or_none()
@@ -246,11 +243,10 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
             curation = await curate_stories(chunk, deepseek_key, custom_prompt=custom_prompt)
             for a in curation.get("analyses", []):
                 all_analyses[a["id"]] = a
-            all_top_ids.update(curation.get("top_pick_ids", []))
         except Exception as e:
             raise HTTPException(502, f"DeepSeek API error on batch {i//10 + 1}: {str(e)}")
 
-    # Retry individually for any stories DeepSeek skipped
+    # Retry individually for missed stories
     missing = [s for s in batch if s["id"] not in all_analyses]
     for s in missing:
         try:
@@ -260,11 +256,16 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         except Exception:
             pass
 
-    analyses = all_analyses
-    top_ids = all_top_ids
+    # Pick top 3 by AI viral_score
+    sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
+    top_ids = set(a["id"] for a in sorted_all[:3])
+    for a in sorted_all[:3]:
+        a["is_top_pick"] = True
+    for a in sorted_all[3:]:
+        a["is_top_pick"] = False
     updated = 0
 
-    for sid, analysis in analyses.items():
+    for sid, analysis in all_analyses.items():
         try:
             s = await db.get(Story, UUID(sid))
             if s:
