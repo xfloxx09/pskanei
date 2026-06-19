@@ -3,13 +3,15 @@ import uuid
 
 import httpx
 
-CURATOR_PROMPT = """You are a world-class social media strategist and viral content director. Analyze these trending news headlines and determine which ones would make the most viral short-form vertical videos (YouTube Shorts, TikTok, Instagram Reels).
+CURATOR_PROMPT = """You are a world-class social media strategist and viral content director. Analyze these trending news stories and their full article content to determine which ones would make the most viral short-form vertical videos (YouTube Shorts, TikTok, Instagram Reels).
 
 For each story, evaluate:
 - Emotional hook potential (anger, awe, curiosity, fear, joy)
 - Shareability (would people send this to friends?)
 - Visual potential (can this be illustrated/stylized well?)
 - Category fit (finance/tech/politics/entertainment/science/sports/weird)
+
+Read the full article text provided — some may be empty. Use the headline AND article content to judge viral potential.
 
 Return ONLY valid JSON:
 {
@@ -30,7 +32,8 @@ Rules:
 - viral_score: 0-100. 80+ = very viral, 60-79 = decent potential, <60 = skip
 - Only pick top 3 as top_pick_ids
 - Be ruthless — most stories are NOT viral. Flag the truly exceptional ones
-- Focus on universal human emotions, not niche interests"""
+- Focus on universal human emotions, not niche interests
+- Use the full article text to find the most compelling angle"""
 
 
 async def curate_stories(

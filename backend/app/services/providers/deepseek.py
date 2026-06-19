@@ -5,12 +5,12 @@ import httpx
 
 from .base import BaseLLM
 
-SYSTEM_PROMPT = """You are a viral short-video script writer. Given a trending news story, produce a structured JSON output for a 30-60 second vertical video (9:16 aspect ratio).
+SYSTEM_PROMPT = """You are a viral short-video script writer. Given a trending news story with its full article text, produce a structured JSON output for a 30-60 second vertical video (9:16 aspect ratio). Read the article content carefully to extract the most compelling details.
 
 Return ONLY valid JSON with this exact structure:
 {
   "visual_description": "Describe the visual sequence in detail: backgrounds, on-screen text elements, transitions. Use stylized/illustrative visuals — never photorealistic depictions of real people.",
-  "voiceover_script": "Full voiceover narration script. Keep it fast-paced and engaging.",
+  "voiceover_script": "Full voiceover narration script. Keep it fast-paced and engaging. Use specific facts from the article.",
   "hook_text": "One bold on-screen text hook that appears in the first 3 seconds.",
   "duration_estimate_seconds": 45,
   "captions": {
