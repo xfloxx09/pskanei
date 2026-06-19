@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import httpx
 
@@ -26,18 +26,30 @@ class RedditScraper(BaseScraper):
 
         stories: list[RawStory] = []
         errors = []
+        empty_responses = 0
 
         async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
             for sub in SUBREDDITS:
                 for sort in SORTS:
                     url = f"{REDDIT_BASE}/r/{sub}/{sort}.json"
-                    params = {"t": t_param, "limit": 50, "raw_json": 1}
+                    params = {"t": t_param, "limit": 50}
                     try:
                         resp = await client.get(url, params=params)
                         resp.raise_for_status()
-                        data = resp.json()
+                        text = resp.text
 
-                        for child in data.get("data", {}).get("children", []):
+                        if not text.strip():
+                            empty_responses += 1
+                            continue
+
+                        data = resp.json()
+                        children = data.get("data", {}).get("children", [])
+
+                        if not children:
+                            empty_responses += 1
+                            continue
+
+                        for child in children:
                             post = child.get("data", {})
                             title = (post.get("title") or "").strip()
                             permalink = post.get("permalink", "")
@@ -62,10 +74,16 @@ class RedditScraper(BaseScraper):
                                     ),
                                 )
                             )
+                    except httpx.HTTPStatusError as exc:
+                        errors.append(f"r/{sub}/{sort}: HTTP {exc.response.status_code}")
                     except Exception as exc:
                         errors.append(f"r/{sub}/{sort}: {exc}")
 
-        if errors and not stories:
-            raise RuntimeError("; ".join(errors))
+        if not stories:
+            if empty_responses == 4:
+                raise RuntimeError("Reddit returned empty children for all 4 feeds (may require auth now)")
+            if errors:
+                raise RuntimeError("; ".join(errors))
+            raise RuntimeError(f"Reddit: no stories, {empty_responses}/4 empty, errors: {errors}")
 
         return stories
