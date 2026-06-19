@@ -922,6 +922,9 @@ export default function ViralClipStudioAdmin() {
                       </div>
                       <CategoryBadge category={q.ai_curation?.category} />
                       <StatusBadge status={q.status} statusMsg={q.status_msg} />
+                      {q.status === 'failed' && q.status_msg && (
+                        <span className="text-xs text-rose-400 max-w-[200px] truncate" title={q.status_msg}>{q.status_msg.length > 40 ? q.status_msg.slice(0, 40) + '...' : q.status_msg}</span>
+                      )}
                       {(q.status === 'ready' || q.status === 'published' || q.status === 'generating' || q.status === 'failed') && (
                         <button onClick={async () => {
                           try {
