@@ -252,7 +252,16 @@ export default function ViralClipStudioAdmin() {
     loadPlatforms();
   }, [loadStatus, loadQueue, loadSchedule, loadScrapeSettings, loadProviders, loadPlatforms]);
 
-  // --- handlers ---
+  // Auto-refresh queue when stories are generating
+  useEffect(() => {
+    const generating = queue.some(q => q.status === 'generating');
+    if (!generating) return;
+    const interval = setInterval(() => {
+      loadQueue();
+      loadStatus();
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [queue, loadQueue, loadStatus]);
 
   function toggleSource(id) {
     setSources((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
