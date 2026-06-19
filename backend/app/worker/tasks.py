@@ -366,6 +366,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                 ("Prompt generation", DeepSeekProvider),
                 ("Prompt generation", OpenAIProvider),
             ]
+            llm_errors_list = []
             for role, cls in llm_classes:
                 for pid, p in all_providers.items():
                     if not p.enabled or p.role != role:
@@ -377,17 +378,18 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                         llm = cls(api_key=key, system_prompt=gen_prompt) if cls == DeepSeekProvider else cls(api_key=key)
                         prompt = await llm.generate_prompt(story.title, (story.content or {}).get("article_text", story.summary or ""))
                         break
-                    except Exception:
+                    except Exception as exc:
+                        llm_errors_list.append(f"{cls.__name__}: {exc}")
                         continue
                 if prompt:
                     break
 
-            if not prompt:
-                story.content["error"] = "No enabled LLM provider with valid API key"
-                story.content["status_msg"] = "No LLM"
-                story.status = "failed"
-                await db.commit()
-                return {"status": "error", "reason": story.content["error"]}
+        if not prompt:
+            story.content["error"] = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
+            story.content["status_msg"] = "LLM failed"
+            story.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": story.content["error"]}
 
         story.content["prompt"] = prompt
         await db.commit()
