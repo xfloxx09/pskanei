@@ -168,6 +168,7 @@ export default function ViralClipStudioAdmin() {
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
   const [previewStory, setPreviewStory] = useState(null);
+  const [showAddProvider, setShowAddProvider] = useState(false);
 
   const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
@@ -278,6 +279,12 @@ export default function ViralClipStudioAdmin() {
   function addProvider() {
     const id = `p${Date.now()}`;
     setProviders((prev) => [...prev, { id, name: 'New provider', role: '', apiKey: '', endpoint: '', enabled: false }]);
+  }
+
+  function addKnownProvider(template) {
+    const id = `p${Date.now()}`;
+    setProviders((prev) => [...prev, { ...template, id, apiKey: '' }]);
+    setShowAddProvider(false);
   }
 
   function removeProvider(id) {
@@ -731,10 +738,52 @@ export default function ViralClipStudioAdmin() {
                 ))}
               </div>
 
-              <div className="flex gap-3">
-                <button onClick={addProvider} className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">
-                  <Plus className="h-4 w-4" /> Add provider
-                </button>
+              <div className="flex gap-3 items-center">
+                <div className="relative">
+                  <button onClick={() => setShowAddProvider(!showAddProvider)} className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">
+                    <Plus className="h-4 w-4" /> Add provider
+                  </button>
+                  {showAddProvider && (
+                    <div className="absolute bottom-full left-0 mb-1 w-72 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl z-50 max-h-80 overflow-y-auto" onMouseLeave={() => setShowAddProvider(false)}>
+                      <div className="p-2 text-xs text-zinc-500 uppercase tracking-wide">Prompt generation</div>
+                      <button onClick={() => addKnownProvider({ name: 'DeepSeek', role: 'Prompt generation', endpoint: 'https://api.deepseek.com', enabled: true, keyUrl: 'https://platform.deepseek.com/api_keys' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        DeepSeek <span className="text-xs text-zinc-500">deepseek.com</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'OpenAI', role: 'Prompt generation', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        OpenAI <span className="text-xs text-zinc-500">GPT-4o-mini</span>
+                      </button>
+                      <div className="p-2 text-xs text-zinc-500 uppercase tracking-wide border-t border-zinc-800 mt-1">Voiceover (TTS)</div>
+                      <button onClick={() => addKnownProvider({ name: 'ElevenLabs', role: 'Voiceover (TTS)', endpoint: '', enabled: true, keyUrl: 'https://elevenlabs.io/app/settings/api-keys' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        ElevenLabs <span className="text-xs text-zinc-500">elevenlabs.io</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'OpenAI TTS', role: 'Voiceover (TTS)', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        OpenAI TTS <span className="text-xs text-zinc-500">tts-1</span>
+                      </button>
+                      <div className="p-2 text-xs text-zinc-500 uppercase tracking-wide border-t border-zinc-800 mt-1">Video assembly</div>
+                      <button onClick={() => addKnownProvider({ name: 'Creatomate', role: 'Video assembly', endpoint: '', enabled: true, keyUrl: 'https://creatomate.com/dashboard/api-key' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        Creatomate <span className="text-xs text-zinc-500">creatomate.com</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'Shotstack', role: 'Video assembly', endpoint: '', enabled: false, keyUrl: 'https://shotstack.io/dashboard' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        Shotstack <span className="text-xs text-zinc-500">shotstack.io</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'JSON2Video', role: 'Video assembly', endpoint: '', enabled: false, keyUrl: 'https://json2video.com/dashboard' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        JSON2Video <span className="text-xs text-zinc-500">json2video.com</span>
+                      </button>
+                      <div className="p-2 text-xs text-zinc-500 uppercase tracking-wide border-t border-zinc-800 mt-1">AI avatar narration</div>
+                      <button onClick={() => addKnownProvider({ name: 'HeyGen', role: 'AI avatar narration', endpoint: '', enabled: false, keyUrl: 'https://app.heygen.com/settings' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        HeyGen <span className="text-xs text-zinc-500">heygen.com</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'Synthesia', role: 'AI avatar narration', endpoint: 'https://api.synthesia.io', enabled: false, keyUrl: 'https://www.synthesia.io/settings' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        Synthesia <span className="text-xs text-zinc-500">synthesia.io</span>
+                      </button>
+                      <div className="border-t border-zinc-800 mt-1 p-2">
+                        <button onClick={() => { addProvider(); setShowAddProvider(false); }} className="w-full text-left px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 rounded">
+                          + Custom provider...
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button onClick={saveProviders} disabled={loading} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400">
                   {loading ? 'Saving...' : 'Save providers'}
                 </button>
