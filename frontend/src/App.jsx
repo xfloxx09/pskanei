@@ -42,10 +42,13 @@ const SOURCE_DEFAULTS = [
 ];
 
 const PROVIDER_DEFAULTS = [
-  { id: 'p1', name: 'DeepSeek', role: 'Prompt generation', apiKey: '', endpoint: 'https://api.deepseek.com', enabled: true },
-  { id: 'p2', name: 'Creatomate', role: 'Video assembly', apiKey: '', endpoint: '', enabled: true },
-  { id: 'p3', name: 'ElevenLabs', role: 'Voiceover (TTS)', apiKey: '', endpoint: '', enabled: true },
-  { id: 'p4', name: 'HeyGen', role: 'AI avatar narration', apiKey: '', endpoint: '', enabled: false },
+  { id: 'p1', name: 'DeepSeek', role: 'Prompt generation', apiKey: '', endpoint: 'https://api.deepseek.com', enabled: true, keyUrl: 'https://platform.deepseek.com/api_keys' },
+  { id: 'p5', name: 'OpenAI', role: 'Prompt generation', apiKey: '', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'p3', name: 'ElevenLabs', role: 'Voiceover (TTS)', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
+  { id: 'p6', name: 'OpenAI TTS', role: 'Voiceover (TTS)', apiKey: '', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'p2', name: 'Creatomate', role: 'Video assembly', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://creatomate.com/dashboard/api-key' },
+  { id: 'p4', name: 'HeyGen', role: 'AI avatar narration', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://app.heygen.com/settings' },
+  { id: 'p7', name: 'Synthesia', role: 'AI avatar narration', apiKey: '', endpoint: 'https://api.synthesia.io', enabled: false, keyUrl: 'https://www.synthesia.io/settings' },
 ];
 
 const PLATFORM_DEFAULTS = [
@@ -206,14 +209,15 @@ export default function ViralClipStudioAdmin() {
     try {
       const data = await fetchJSON(`${API}/providers`);
       if (data.providers?.length) {
-        setProviders(data.providers.map(p => ({
-          id: p.id,
-          name: p.name,
-          role: p.role,
-          apiKey: p.apiKey || '',
-          endpoint: p.endpoint || '',
-          enabled: p.enabled,
-        })));
+    setProviders(data.providers.map(p => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        apiKey: p.apiKey || '',
+        endpoint: p.endpoint || '',
+        enabled: p.enabled,
+        keyUrl: p.keyUrl || '',
+      })));
       }
       if (data.daily_budget != null) setDailyBudget(data.daily_budget);
     } catch { /* offline */ }
@@ -696,6 +700,12 @@ export default function ViralClipStudioAdmin() {
                             >
                               {visibleKeys[p.id] ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                             </button>
+                          </div>
+                          {p.keyUrl && (
+                            <a href={p.keyUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-amber-400 hover:underline mt-1">
+                              <ExternalLink className="h-3 w-3" /> Get API key
+                            </a>
+                          )}
                           </div>
                         </div>
                         <div className="col-span-2">

@@ -243,8 +243,11 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
     from ..services.budget import check_budget
     from ..services.providers import (
         DeepSeekProvider,
+        OpenAIProvider,
         ElevenLabsProvider,
+        OpenAITTSProvider,
         CreatomateProvider,
+        SynthesiaProvider,
     )
 
     async with async_session() as db:
@@ -274,22 +277,83 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
                 return decrypt(p.api_key_encrypted)
             return ""
 
-        # --- Step 1: Generate prompt via DeepSeek ---
-        llm = DeepSeekProvider(api_key=_get_key("p1"))
-        prompt = await llm.generate_prompt(story.title, story.summary or "")
+        # --- Step 1: Generate prompt (try LLM providers in order) ---
+        llm_providers = [
+            ("p1", DeepSeekProvider),
+            ("p5", OpenAIProvider),
+        ]
+        prompt = None
+        for pid, cls in llm_providers:
+            key = _get_key(pid)
+            if not key:
+                continue
+            try:
+                llm = cls(api_key=key)
+                prompt = await llm.generate_prompt(story.title, story.summary or "")
+                break
+            except Exception:
+                continue
+
+        if not prompt:
+            story.content["error"] = "No enabled LLM provider with valid API key"
+            story.status = "failed"
+            await db.commit()
+            raise RuntimeError(story.content["error"])
+
         story.content["prompt"] = prompt
         await db.commit()
 
-        # --- Step 2: Generate TTS via ElevenLabs ---
+        # --- Step 2: Generate TTS (try providers in order) ---
         voiceover = prompt.get("voiceover_script", story.title)
-        tts = ElevenLabsProvider(api_key=_get_key("p3"))
-        tts_url = await tts.generate_speech(voiceover)
+        tts_providers = [
+            ("p3", ElevenLabsProvider),
+            ("p6", OpenAITTSProvider),
+        ]
+        tts_url = None
+        for pid, cls in tts_providers:
+            key = _get_key(pid)
+            if not key:
+                continue
+            try:
+                tts = cls(api_key=key)
+                tts_url = await tts.generate_speech(voiceover)
+                break
+            except Exception:
+                continue
+
+        if not tts_url:
+            story.content["error"] = "No enabled TTS provider with valid API key"
+            story.status = "failed"
+            await db.commit()
+            raise RuntimeError(story.content["error"])
+
         story.content["tts_url"] = tts_url
         await db.commit()
 
-        # --- Step 3: Render video via Creatomate ---
-        video = CreatomateProvider(api_key=_get_key("p2"))
-        video_url = await video.render_video(prompt, tts_url)
+        # --- Step 3: Render video (try providers in order) ---
+        video_providers = [
+            ("p2", CreatomateProvider),
+            ("p4", SynthesiaProvider),
+            ("p7", SynthesiaProvider),
+        ]
+        video_url = None
+        for pid, cls in video_providers:
+            key = _get_key(pid)
+            if not key:
+                continue
+            try:
+                video = cls(api_key=key)
+                video_url = await video.render_video(prompt, tts_url)
+                break
+            except Exception:
+                continue
+
+        if not video_url:
+            story.content["error"] = "No enabled video/avatar provider with valid API key"
+            story.status = "failed"
+            await db.commit()
+            raise RuntimeError(story.content["error"])
+
         story.content["video_url"] = video_url
         await db.commit()
 
