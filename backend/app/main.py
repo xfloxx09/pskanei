@@ -20,8 +20,22 @@ from .services.budget import get_spent_today, get_daily_budget
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add columns missing from earlier deploys
+        await conn.run_sync(_run_migrations)
     yield
     await engine.dispose()
+
+
+def _run_migrations(conn):
+    from sqlalchemy import text
+    try:
+        conn.execute(text("ALTER TABLE scrape_settings ADD COLUMN IF NOT EXISTS scraper_keys JSONB DEFAULT '{}' NOT NULL"))
+    except Exception:
+        pass
+    try:
+        conn.execute(text("ALTER TABLE stories ADD COLUMN IF NOT EXISTS content JSONB"))
+    except Exception:
+        pass
 
 
 app = FastAPI(
