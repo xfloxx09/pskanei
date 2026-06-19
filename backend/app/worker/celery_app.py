@@ -23,7 +23,11 @@ app.conf.update(
     beat_schedule={
         "scrape-periodic": {
             "task": "app.worker.tasks.scrape_and_score",
-            "schedule": 60.0,  # check every 60s, task decides whether to run
+            "schedule": 60.0,
+        },
+        "check-scheduled-posts": {
+            "task": "app.worker.tasks.check_scheduled_posts",
+            "schedule": 60.0,
         },
     },
 )

@@ -211,3 +211,160 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         await db.commit()
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
+
+
+@app.task(bind=True, max_retries=2, default_retry_delay=120)
+def publish_clip(self, clip_id: str):
+    try:
+        asyncio.run(_run_publish_clip(clip_id))
+    except Exception as exc:
+        if self.request.retries >= self.max_retries:
+            _mark_clip_failed_sync(clip_id, str(exc))
+        raise self.retry(exc=exc)
+
+
+@app.task(name="app.worker.tasks.check_scheduled_posts")
+def check_scheduled_posts():
+    try:
+        asyncio.run(_run_check_scheduled())
+    except Exception as exc:
+        print(f"[scheduler] check_scheduled_posts failed: {exc}")
+
+
+def _mark_clip_failed_sync(clip_id: str, error: str):
+    asyncio.run(_mark_clip_failed(clip_id, error))
+
+
+async def _mark_clip_failed(clip_id: str, error: str):
+    from uuid import UUID as _UUID
+
+    from ..database import async_session
+    from ..models.published_clip import PublishedClip
+
+    async with async_session() as db:
+        clip = await db.get(PublishedClip, _UUID(clip_id))
+        if clip:
+            clip.status = "failed"
+            await db.commit()
+
+
+async def _run_publish_clip(clip_id: str):
+    import os
+
+    os.environ.setdefault("ENVIRONMENT", "production")
+
+    from datetime import datetime, timezone
+    from uuid import UUID as _UUID
+
+    from ..database import async_session
+    from ..models.platform_account import PlatformAccount
+    from ..models.published_clip import PublishedClip
+    from ..models.story import Story
+    from ..services.crypto import decrypt
+    from ..services.storage import upload_to_r2
+    from ..services.publishers import (
+        YouTubePublisher,
+        TikTokPublisher,
+        InstagramPublisher,
+        FacebookPublisher,
+    )
+
+    PUBLISHER_MAP = {
+        "youtube": YouTubePublisher(),
+        "tiktok": TikTokPublisher(),
+        "instagram": InstagramPublisher(),
+        "facebook": FacebookPublisher(),
+    }
+
+    async with async_session() as db:
+        clip = await db.get(PublishedClip, _UUID(clip_id))
+        if not clip:
+            return {"status": "error", "reason": "clip not found"}
+
+        story = await db.get(Story, clip.story_id)
+        if not story:
+            clip.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": "story not found"}
+
+        platform = await db.get(PlatformAccount, clip.platform)
+        if not platform or not platform.connected or not platform.enabled:
+            clip.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": "platform not connected"}
+
+        access_token = decrypt(platform.access_token_encrypted) if platform.access_token_encrypted else ""
+        if not access_token:
+            clip.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": "no access token"}
+
+        publisher = PUBLISHER_MAP.get(clip.platform)
+        if not publisher:
+            clip.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": f"unknown platform {clip.platform}"}
+
+        video_url = (story.content or {}).get("video_url", "")
+        if not video_url:
+            clip.status = "failed"
+            await db.commit()
+            return {"status": "error", "reason": "no video URL in story content"}
+
+        r2_url = await upload_to_r2(video_url)
+
+        prompt_data = (story.content or {}).get("prompt", {})
+        caption = ""
+        if isinstance(prompt_data, dict):
+            caps = prompt_data.get("captions", {})
+            platform_caps = caps.get(clip.platform, {})
+            if isinstance(platform_caps, dict):
+                hashtags = " ".join(platform_caps.get("hashtags", []))
+                caption = f"{platform_caps.get('text', '')} {hashtags}".strip()
+
+        try:
+            result = await publisher.publish(
+                video_url=r2_url or video_url,
+                title=story.title,
+                caption=caption or story.title,
+                access_token=access_token,
+            )
+            clip.platform_post_id = result.get("post_id", "")
+            clip.video_url = result.get("url", "")
+            clip.status = "published"
+            clip.published_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {"status": "ok", "clip_id": clip_id, "post_id": result.get("post_id")}
+        except Exception as exc:
+            clip.status = "failed"
+            await db.commit()
+            raise
+
+
+async def _run_check_scheduled():
+    import os
+
+    os.environ.setdefault("ENVIRONMENT", "production")
+
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+
+    from ..database import async_session
+    from ..models.published_clip import PublishedClip
+
+    async with async_session() as db:
+        now = datetime.now(timezone.utc)
+        result = await db.execute(
+            select(PublishedClip).where(
+                PublishedClip.status == "scheduled",
+                PublishedClip.scheduled_at <= now,
+            )
+        )
+        due_clips = result.scalars().all()
+
+        for clip in due_clips:
+            clip.status = "publishing"
+            await db.commit()
+            publish_clip.delay(str(clip.id))
+
+        return {"status": "ok", "due_clips": len(due_clips)}

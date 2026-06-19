@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .database import engine, Base, get_db
-from .models import Story, ScrapeSettings, Provider  # ensure tables are registered  # noqa: F401
-from .routers import queue_router, scrape_router, providers_router
+from .models import Story, ScrapeSettings, Provider, PlatformAccount, PublishedClip  # noqa: F401
+from .routers import queue_router, scrape_router, providers_router, platforms_router, auth_router, schedule_router
 from .services.budget import get_spent_today, get_daily_budget
 
 
@@ -37,6 +37,9 @@ app.add_middleware(
 app.include_router(queue_router)
 app.include_router(scrape_router)
 app.include_router(providers_router)
+app.include_router(platforms_router)
+app.include_router(auth_router)
+app.include_router(schedule_router)
 
 
 @app.get("/api/status")
