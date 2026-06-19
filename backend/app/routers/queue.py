@@ -269,7 +269,7 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
                 "is_top_pick": False,
             })
             await db.execute(
-                _text("UPDATE stories SET content = jsonb_set(COALESCE(content::jsonb, '{}'), '{ai_curation}', :val::jsonb) WHERE id = :id"),
+                _text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), '{ai_curation}', CAST(:val AS jsonb), true) WHERE id = CAST(:id AS uuid)"),
                 {"val": curation_json, "id": sid},
             )
             updated += 1
@@ -284,7 +284,7 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     for tid in top_ids:
         try:
             await db.execute(
-                _text("UPDATE stories SET content = jsonb_set(COALESCE(content::jsonb, '{}'), '{ai_curation,is_top_pick}', 'true'::jsonb) WHERE id = :id"),
+                _text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), '{ai_curation,is_top_pick}', 'true'::jsonb, true) WHERE id = CAST(:id AS uuid)"),
                 {"id": tid},
             )
         except Exception:
