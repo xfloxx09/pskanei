@@ -22,7 +22,7 @@ class GDELTScraper(BaseScraper):
             "mode": "artlist",
             "maxrecords": 75,
             "format": "json",
-            "timespan": f"{minutes}min",
+            "timespan": f"{minutes}minutes",
         }
 
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
@@ -40,8 +40,9 @@ class GDELTScraper(BaseScraper):
 
         articles = data.get("articles", [])
         if not articles:
-            keys = list(data.keys()) if isinstance(data, dict) else "not a dict"
-            raise RuntimeError(f"GDELT returned 0 articles. Response keys: {keys}, preview: {text[:200]}")
+            keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+            raw_preview = text[:500]
+            raise RuntimeError(f"GDELT 0 articles. type={type(data).__name__}, keys={keys}, text={raw_preview}")
 
         stories: list[RawStory] = []
         for article in articles:

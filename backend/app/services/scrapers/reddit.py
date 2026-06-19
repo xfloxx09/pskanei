@@ -27,6 +27,7 @@ class RedditScraper(BaseScraper):
         stories: list[RawStory] = []
         errors = []
         empty_responses = 0
+        first_response_preview = ""
 
         async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
             for sub in SUBREDDITS:
@@ -37,6 +38,9 @@ class RedditScraper(BaseScraper):
                         resp = await client.get(url, params=params)
                         resp.raise_for_status()
                         text = resp.text
+
+                        if not first_response_preview:
+                            first_response_preview = text[:300]
 
                         if not text.strip():
                             empty_responses += 1
@@ -81,9 +85,9 @@ class RedditScraper(BaseScraper):
 
         if not stories:
             if empty_responses == 4:
-                raise RuntimeError("Reddit returned empty children for all 4 feeds (may require auth now)")
+                raise RuntimeError(f"Reddit: all 4 feeds empty. First response: {first_response_preview}")
             if errors:
                 raise RuntimeError("; ".join(errors))
-            raise RuntimeError(f"Reddit: no stories, {empty_responses}/4 empty, errors: {errors}")
+            raise RuntimeError(f"Reddit: no stories, {empty_responses}/4 empty. First response: {first_response_preview}")
 
         return stories
