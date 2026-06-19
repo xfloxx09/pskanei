@@ -58,20 +58,26 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
 
     missing = []
     # Check by role, not by hardcoded ID — works with custom providers too
-    has_llm = any(
-        _has_key(p.id) for p in all_providers.values()
-        if p.role and "prompt" in p.role.lower()
-    )
-    has_video = any(
-        _has_key(p.id) for p in all_providers.values()
-        if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())
-    )
+    llm_providers = [p for p in all_providers.values() if p.role and "prompt" in p.role.lower()]
+    tts_providers = [p for p in all_providers.values() if p.role and ("tts" in p.role.lower() or "voiceover" in p.role.lower())]
+    video_providers = [p for p in all_providers.values() if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())]
+
+    has_llm = any(_has_key(p.id) for p in llm_providers)
+    has_video = any(_has_key(p.id) for p in video_providers)
 
     if not has_llm:
-        missing.append("LLM (DeepSeek, OpenAI, etc.)")
-    # TTS: Edge TTS is always available for free, so never missing
+        names = [p.name for p in llm_providers]
+        if names:
+            missing.append(f"LLM (enabled but no key: {', '.join(names)})")
+        else:
+            missing.append("LLM (no providers enabled. Add one via Add Provider dropdown)")
+
     if not has_video:
-        missing.append("Video assembly (Creatomate, Shotstack, HeyGen, etc.)")
+        names = [p.name for p in video_providers]
+        if names:
+            missing.append(f"Video (enabled but no key: {', '.join(names)})")
+        else:
+            missing.append("Video (no providers enabled. Add one via Add Provider dropdown)")
 
     if missing:
         raise HTTPException(400, f"Missing API keys: {', '.join(missing)}. Set them in AI Providers tab.")
