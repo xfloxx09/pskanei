@@ -27,7 +27,7 @@ class GDELTScraper(BaseScraper):
             "timespan": f"{minutes}minutes",
         }
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
             resp = await client.get(GAPI_URL, params=params)
             resp.raise_for_status()
             data = resp.json()

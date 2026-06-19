@@ -110,16 +110,25 @@ async def _run_scrape_pipeline():
             return {"status": "skipped", "reason": "no enabled sources"}
 
         all_raw = []
+        source_errors = {}
+        source_counts = {}
         for src_cfg in enabled_sources:
             scraper = SCRAPER_MAP[src_cfg["id"]]
             try:
                 raw_stories = await scraper.fetch(time_window)
-                all_raw.extend(raw_stories)
+                source_counts[src_cfg["id"]] = len(raw_stories or [])
+                all_raw.extend(raw_stories or [])
             except Exception as exc:
-                print(f"[scraper] {src_cfg['id']} failed: {exc}")
+                source_errors[src_cfg["id"]] = str(exc)
+                source_counts[src_cfg["id"]] = 0
 
         if not all_raw:
-            return {"status": "skipped", "reason": "no stories fetched"}
+            return {
+                "status": "skipped",
+                "reason": "no stories fetched",
+                "source_counts": source_counts,
+                "source_errors": source_errors,
+            }
 
         unique = deduplicate(all_raw)
         scored = score_stories(unique, time_window)
@@ -148,7 +157,7 @@ async def _run_scrape_pipeline():
 
         await db.commit()
 
-        return {"status": "ok", "stories_saved": saved}
+        return {"status": "ok", "stories_saved": saved, "source_counts": source_counts, "source_errors": source_errors}
 
 
 async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):

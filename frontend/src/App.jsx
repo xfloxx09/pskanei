@@ -135,7 +135,7 @@ export default function ViralClipStudioAdmin() {
 
   const showToast = useCallback((msg) => {
     setToast(msg);
-    setTimeout(() => setToast(''), 3000);
+    setTimeout(() => setToast(''), 8000);
   }, []);
 
   // --- Load data on mount and tab switch ---
@@ -340,14 +340,24 @@ export default function ViralClipStudioAdmin() {
     setScraping(true);
     try {
       const data = await fetchJSON(`${API}/scrape/trigger`, { method: 'POST' });
-      const saved = data?.detail?.stories_saved ?? 0;
-      const status = data?.detail?.status ?? 'done';
-      if (status === 'skipped') {
-        showToast(data?.detail?.reason || 'Scrape skipped');
+      const detail = data?.detail || {};
+      const saved = detail?.stories_saved ?? 0;
+      const status = detail?.status ?? 'done';
+      const counts = detail?.source_counts || {};
+      const errors = detail?.source_errors || {};
+
+      if (data?.error) {
+        showToast(`Scrape failed: ${data.error}`);
+      } else if (status === 'skipped') {
+        const countStr = Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(', ');
+        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
+        const info = [countStr, errStr].filter(Boolean).join(' | ');
+        showToast(`${detail?.reason || 'Scrape skipped'}${info ? ` (${info})` : ''}`);
       } else if (saved > 0) {
-        showToast(`${saved} new stories found and scored`);
+        showToast(`${saved} stories found`);
       } else {
-        showToast('Scrape completed — no new stories found');
+        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
+        showToast(`No stories found${errStr ? ` — ${errStr}` : ''}`);
       }
       await loadQueue();
       await loadStatus();
@@ -366,7 +376,7 @@ export default function ViralClipStudioAdmin() {
     <div className="flex min-h-screen w-full overflow-hidden bg-zinc-950 font-sans text-zinc-100">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 rounded-md border border-amber-500 bg-amber-950 px-4 py-2 text-sm text-amber-200 shadow-lg">
+        <div className="fixed top-4 right-4 z-50 max-w-lg rounded-md border border-amber-500 bg-amber-950 px-4 py-2 text-sm text-amber-200 shadow-lg">
           {toast}
         </div>
       )}
