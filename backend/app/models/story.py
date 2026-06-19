@@ -23,6 +23,7 @@ class Story(Base):
     score_breakdown: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     time_window: Mapped[str] = mapped_column(String(5), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
+    content: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     spotted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -38,7 +39,7 @@ class Story(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'generating', 'ready', 'published', 'rejected')",
+            "status IN ('pending','generating','ready','published','rejected','failed')",
             name="ck_stories_status",
         ),
     )

@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .database import engine, Base, get_db
-from .models import Story, ScrapeSettings  # ensure tables are registered  # noqa: F401
-from .routers import queue_router, scrape_router
+from .models import Story, ScrapeSettings, Provider  # ensure tables are registered  # noqa: F401
+from .routers import queue_router, scrape_router, providers_router
+from .services.budget import get_spent_today, get_daily_budget
 
 
 @asynccontextmanager
@@ -35,6 +36,7 @@ app.add_middleware(
 
 app.include_router(queue_router)
 app.include_router(scrape_router)
+app.include_router(providers_router)
 
 
 @app.get("/api/status")
@@ -49,7 +51,8 @@ async def status(db: AsyncSession = Depends(get_db)):
         "pending": await _count("pending"),
         "generating": await _count("generating"),
         "ready": await _count("ready"),
-        "budget_used_today": 0,
+        "budget_used_today": await get_spent_today(db),
+        "daily_budget": await get_daily_budget(db),
     }
 
 

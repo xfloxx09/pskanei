@@ -39,9 +39,15 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Story not found")
     if story.status != "pending":
         raise HTTPException(409, f"Story is not pending (currently {story.status})")
+
+    from ..worker.tasks import create_pipeline
+
     story.status = "generating"
     await db.commit()
     await db.refresh(story)
+
+    create_pipeline.delay(str(story_id))
+
     return {"success": True, "story": StoryOut.model_validate(story)}
 
 
@@ -56,4 +62,25 @@ async def reject_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     story.status = "rejected"
     await db.commit()
     await db.refresh(story)
+    return {"success": True, "story": StoryOut.model_validate(story)}
+
+
+@router.post("/{story_id}/retry")
+async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Story).where(Story.id == story_id))
+    story = result.scalar_one_or_none()
+    if not story:
+        raise HTTPException(404, "Story not found")
+    if story.status not in ("failed", "generating"):
+        raise HTTPException(409, f"Story is not retryable (currently {story.status})")
+
+    from ..worker.tasks import retry_failed_story
+
+    story.status = "generating"
+    story.content = story.content or {}
+    story.content.pop("error", None)
+    await db.commit()
+
+    retry_failed_story.delay(str(story_id))
+
     return {"success": True, "story": StoryOut.model_validate(story)}

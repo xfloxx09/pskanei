@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Integer, String, DateTime, CheckConstraint
+from sqlalchemy import Integer, String, DateTime, CheckConstraint, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,7 @@ class ScrapeSettings(Base):
     time_window: Mapped[str] = mapped_column(String(5), default="6h", nullable=False)
     frequency_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     sources: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    daily_budget: Mapped[float] = mapped_column(Float, default=15.0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
