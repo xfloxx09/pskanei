@@ -163,6 +163,29 @@ async def _run_scrape_pipeline():
 
         await db.commit()
 
+        # --- Fetch article content for each story ---
+        fetched = 0
+        try:
+            from ..services.content_fetcher import extract_article_text
+
+            all_stories = (await db.execute(
+                select(Story).order_by(Story.spotted_at.desc()).limit(50)
+            )).scalars().all()
+
+            for s in all_stories:
+                if s.url and not (s.content or {}).get("article_text"):
+                    text = await extract_article_text(s.url)
+                    if text:
+                        s.content = s.content or {}
+                        s.content["article_text"] = text
+                        s.summary = text[:500] if not s.summary else s.summary
+                        fetched += 1
+
+            if fetched:
+                await db.commit()
+        except Exception:
+            pass
+
         # --- AI curation (requires DeepSeek key) ---
         curated = 0
         try:
@@ -185,6 +208,7 @@ async def _run_scrape_pipeline():
                         "title": s.title,
                         "score": s.score,
                         "source": s.source,
+                        "content": (s.content or {}).get("article_text", ""),
                     }
                     for s in (
                         await db.execute(
@@ -313,7 +337,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
                         continue
                     try:
                         llm = cls(api_key=key, system_prompt=gen_prompt) if cls == DeepSeekProvider else cls(api_key=key)
-                        prompt = await llm.generate_prompt(story.title, story.summary or "")
+                        prompt = await llm.generate_prompt(story.title, (story.content or {}).get("article_text", story.summary or ""))
                         break
                     except Exception:
                         continue

@@ -13,3 +13,4 @@ boto3>=1.34,<2
 pytrends>=4.9,<5
 cryptography>=42,<44
 edge-tts>=6.1,<7
+trafilatura>=1.12,<2

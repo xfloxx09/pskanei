@@ -1095,6 +1095,13 @@ export default function ViralClipStudioAdmin() {
                 </div>
               )}
 
+              {previewStory.content?.article_text && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1">Article Content (AI reads this)</div>
+                  <div className="p-3 rounded-lg bg-zinc-950 max-h-48 overflow-y-auto text-xs text-zinc-400 whitespace-pre-wrap">{previewStory.content.article_text}</div>
+                </div>
+              )}
+
               {previewStory.ai_curation && (
                 <div className="grid grid-cols-3 gap-3 p-3 rounded-lg bg-zinc-950">
                   <div>

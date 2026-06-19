@@ -223,7 +223,7 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "No stories in queue")
 
     batch = [
-        {"id": str(s.id), "title": s.title, "score": s.score, "source": s.source}
+        {"id": str(s.id), "title": s.title, "score": s.score, "source": s.source, "content": (s.content or {}).get("article_text", "")}
         for s in stories
     ]
 

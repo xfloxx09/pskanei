@@ -46,6 +46,7 @@ async def curate_stories(
 
     story_text = "\n".join(
         f'[id:{s["id"]}] score:{s.get("score",0)} source:{s.get("source","")} | {s["title"]}'
+        + (f'\n  Article: {s.get("content","")[:500]}' if s.get("content") else '')
         for s in stories
     )
 
