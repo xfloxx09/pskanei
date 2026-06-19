@@ -280,15 +280,14 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
         return await _run_create_pipeline_inner(story_id, skip_budget_check, skip_prompt)
     except Exception as e:
         from ..database import async_session
+        import json as _json2
+        from sqlalchemy import text as _text2
+        err_str = _json2.dumps(str(e)[:500])
+        msg_str = _json2.dumps(("Crash: " + str(e))[:80])
         async with async_session() as err_db:
-            from sqlalchemy import select, text as _text
-            # Use raw SQL with properly quoted JSON
-            import json as _json
-            err_sql = _json.dumps(str(e)[:500])
-            msg_sql = _json.dumps(("Crash: " + str(e))[:80])
             await err_db.execute(
-                _text("UPDATE stories SET status = 'failed', content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', :err::jsonb, true), '{status_msg}', :msg::jsonb, true) WHERE id = :id::uuid"),
-                {"err": err_sql, "msg": msg_sql, "id": story_id},
+                _text2("UPDATE stories SET status = 'failed', updated_at = NOW(), content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', :err::jsonb, true), '{status_msg}', :msg::jsonb, true) WHERE id = :id::uuid"),
+                {"err": err_str, "msg": msg_str, "id": story_id},
             )
             await err_db.commit()
         return {"status": "error", "reason": str(e)}
@@ -319,6 +318,23 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         SynthesiaProvider,
     )
 
+    import json as _json
+    from sqlalchemy import text as _text
+
+    async def _update_story(sid, updates: dict):
+        for key, val in updates.items():
+            val_json = _json.dumps(val)
+            await db.execute(
+                _text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid"),
+                {"path": "{" + key + "}", "val": val_json, "id": sid},
+            )
+
+    async def _update_status(sid, status: str):
+        await db.execute(
+            _text("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid"),
+            {"st": status, "id": sid},
+        )
+
     async with async_session() as db:
         story = await db.get(Story, _UUID(story_id))
         if not story:
@@ -335,6 +351,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         story.content.pop("error", None)
         story.content["status_msg"] = "Starting..."
         await db.commit()
+        # Also write via raw SQL to guarantee persistence
+        await _update_status(story_id, "generating")
+        await _update_story(story_id, {"status_msg": "Starting..."})
 
         providers_result = await db.execute(
             select(Provider).where(Provider.enabled.is_(True))
@@ -388,18 +407,17 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     break
 
         if not prompt:
-            story.content["error"] = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
-            story.content["status_msg"] = "LLM failed"
-            story.status = "failed"
-            await db.commit()
-            return {"status": "error", "reason": story.content["error"]}
+            err_msg = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
+            await _update_status(story_id, "failed")
+            await _update_story(story_id, {"error": err_msg, "status_msg": "LLM failed"})
+            return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
         await db.commit()
+        await _update_story(story_id, {"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
-        story.content["status_msg"] = "Generating voiceover..."
-        await db.commit()
+        await _update_story(story_id, {"status_msg": "Generating voiceover..."})
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -432,18 +450,15 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                 tts_errors.append(f"EdgeTTS: {exc}")
 
         if not tts_url:
-            story.content["error"] = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
-            story.content["status_msg"] = "TTS failed"
-            story.status = "failed"
-            await db.commit()
-            return {"status": "error", "reason": story.content["error"]}
+            err_msg = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
+            await _update_status(story_id, "failed")
+            await _update_story(story_id, {"error": err_msg, "status_msg": "TTS failed"})
+            return {"status": "error", "reason": err_msg}
 
-        story.content["tts_url"] = tts_url
-        await db.commit()
+        await _update_story(story_id, {"tts_url": tts_url})
 
         # --- Step 3: Render video ---
-        story.content["status_msg"] = "Rendering video..."
-        await db.commit()
+        await _update_story(story_id, {"status_msg": "Rendering video..."})
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -470,19 +485,16 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                 break
 
         if not video_url:
-            story.content["error"] = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
-            story.content["status_msg"] = "Video failed"
-            story.status = "failed"
-            await db.commit()
-            return {"status": "error", "reason": story.content["error"]}
+            err_msg = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
+            await _update_status(story_id, "failed")
+            await _update_story(story_id, {"error": err_msg, "status_msg": "Video failed"})
+            return {"status": "error", "reason": err_msg}
 
-        story.content["video_url"] = video_url
-        await db.commit()
+        await _update_story(story_id, {"video_url": video_url})
 
         # --- Step 4: Finalize ---
-        story.status = "ready"
-        story.content["status_msg"] = "Ready"
-        await db.commit()
+        await _update_status(story_id, "ready")
+        await _update_story(story_id, {"status_msg": "Ready"})
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
