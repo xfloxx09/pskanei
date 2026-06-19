@@ -1022,6 +1022,11 @@ export default function ViralClipStudioAdmin() {
             </div>
 
             <div className="space-y-4 text-sm">
+              <div className="flex items-center gap-2">
+                <StatusBadge status={previewStory.status} statusMsg={previewStory.status_msg || previewStory.status} />
+                {previewStory.status === 'generating' && <span className="text-xs text-amber-400 animate-pulse">Live</span>}
+              </div>
+
               <div>
                 <div className="text-xs text-zinc-500 mb-1">Title</div>
                 <div className="text-zinc-200">{previewStory.title}</div>

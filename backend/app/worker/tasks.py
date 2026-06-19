@@ -404,14 +404,6 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
-        except Exception as exc:
-            story.status = "failed"
-            story.content = story.content or {}
-            story.content["error"] = str(exc)
-            story.content["status_msg"] = f"Pipeline crashed: {str(exc)[:80]}"
-            await db.commit()
-            return {"status": "error", "reason": str(exc)}
-
 
 @app.task(bind=True, max_retries=2, default_retry_delay=120)
 def publish_clip(self, clip_id: str):
