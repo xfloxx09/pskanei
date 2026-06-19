@@ -15,6 +15,7 @@ class ScrapeSettings(Base):
     frequency_minutes: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
     sources: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
     scraper_keys: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    prompt_templates: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     daily_budget: Mapped[float] = mapped_column(Float, default=15.0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

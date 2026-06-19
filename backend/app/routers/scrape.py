@@ -83,6 +83,27 @@ async def update_settings(body: ScrapeSettingsIn, db: AsyncSession = Depends(get
     return {"success": True}
 
 
+@router.get("/prompts")
+async def get_prompts(db: AsyncSession = Depends(get_db)):
+    from ..schemas.scrape_settings import DEFAULT_PROMPT_TEMPLATES
+    settings = await _get_or_create_settings(db)
+    prompts = dict(DEFAULT_PROMPT_TEMPLATES)
+    stored = settings.prompt_templates or {}
+    if isinstance(stored, dict):
+        prompts.update(stored)
+    return {"prompts": prompts}
+
+
+@router.post("/prompts")
+async def save_prompts(body: dict, db: AsyncSession = Depends(get_db)):
+    settings = await _get_or_create_settings(db)
+    if "prompts" in body:
+        settings.prompt_templates = body["prompts"]
+    settings.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"success": True}
+
+
 @router.get("/debug/scrape/{source_id}")
 async def debug_scrape(source_id: str):
     from ..services.scrapers import (

@@ -25,9 +25,10 @@ Return ONLY valid JSON with this exact structure:
 class DeepSeekProvider(BaseLLM):
     provider_id = "deepseek"
 
-    def __init__(self, api_key: str, endpoint: str = "https://api.deepseek.com"):
+    def __init__(self, api_key: str, endpoint: str = "https://api.deepseek.com", system_prompt: str = ""):
         self.api_key = api_key
         self.endpoint = endpoint.rstrip("/")
+        self._system_prompt = system_prompt or SYSTEM_PROMPT
 
     async def generate_prompt(self, story_title: str, story_summary: str) -> dict:
         if not self.api_key:
@@ -41,7 +42,7 @@ class DeepSeekProvider(BaseLLM):
         payload = {
             "model": "deepseek-chat",
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self._system_prompt},
                 {
                     "role": "user",
                     "content": f"News headline: {story_title}\n\nSummary: {story_summary}",

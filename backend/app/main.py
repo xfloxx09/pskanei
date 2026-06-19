@@ -33,7 +33,7 @@ def _run_migrations(conn):
     except Exception:
         pass
     try:
-        conn.execute(text("ALTER TABLE stories ADD COLUMN IF NOT EXISTS content JSONB"))
+        conn.execute(text("ALTER TABLE scrape_settings ADD COLUMN IF NOT EXISTS prompt_templates JSONB DEFAULT '{}' NOT NULL"))
     except Exception:
         pass
 

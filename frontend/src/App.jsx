@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard, Radar, Sparkles, Share2, ListChecks, CalendarClock,
   Plus, Trash2, Check, X, Clock, TrendingUp, KeyRound, Wifi, WifiOff,
-  RefreshCw, DollarSign, AlertCircle, Eye, EyeOff, ExternalLink,
+  RefreshCw, DollarSign, AlertCircle, Eye, EyeOff, ExternalLink, Settings,
 } from 'lucide-react';
 
 const API = '/api';
@@ -171,6 +171,8 @@ export default function ViralClipStudioAdmin() {
   const [scraping, setScraping] = useState(false);
   const [previewStory, setPreviewStory] = useState(null);
   const [showAddProvider, setShowAddProvider] = useState(false);
+  const [prompts, setPrompts] = useState({ curator: '', generator: '' });
+  const [showPrompts, setShowPrompts] = useState(false);
 
   const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
@@ -243,6 +245,13 @@ export default function ViralClipStudioAdmin() {
     } catch { /* offline */ }
   }, []);
 
+  const loadPrompts = useCallback(async () => {
+    try {
+      const data = await fetchJSON(`${API}/scrape/prompts`);
+      if (data?.prompts) setPrompts(data.prompts);
+    } catch { /* offline */ }
+  }, []);
+
   useEffect(() => {
     loadStatus();
     loadQueue();
@@ -250,7 +259,8 @@ export default function ViralClipStudioAdmin() {
     loadScrapeSettings();
     loadProviders();
     loadPlatforms();
-  }, [loadStatus, loadQueue, loadSchedule, loadScrapeSettings, loadProviders, loadPlatforms]);
+    loadPrompts();
+  }, [loadStatus, loadQueue, loadSchedule, loadScrapeSettings, loadProviders, loadPlatforms, loadPrompts]);
 
   // Auto-refresh queue when stories are generating
   useEffect(() => {
@@ -296,6 +306,22 @@ export default function ViralClipStudioAdmin() {
     const id = `p${Date.now()}`;
     setProviders((prev) => [...prev, { ...template, id, apiKey: '' }]);
     setShowAddProvider(false);
+  }
+
+  async function savePrompts() {
+    try {
+      setLoading(true);
+      await fetchJSON(`${API}/scrape/prompts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompts }),
+      });
+      showToast('Prompts saved');
+    } catch (e) {
+      showToast(`Error: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function removeProvider(id) {
@@ -797,10 +823,40 @@ export default function ViralClipStudioAdmin() {
                     </div>
                   )}
                 </div>
+                <button onClick={() => setShowPrompts(!showPrompts)} className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-900">
+                  <Settings className="h-4 w-4" /> {showPrompts ? 'Hide AI Prompts' : 'Edit AI Prompts'}
+                </button>
                 <button onClick={saveProviders} disabled={loading} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400">
                   {loading ? 'Saving...' : 'Save providers'}
                 </button>
               </div>
+
+              {showPrompts && (
+                <Card className="p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-sm font-medium text-zinc-200">AI Prompt Templates</div>
+                    <button onClick={savePrompts} className="text-xs text-amber-400 hover:underline">Save prompts</button>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Curator Prompt (story analysis)</label>
+                      <textarea
+                        value={prompts.curator || ''}
+                        onChange={(e) => setPrompts(prev => ({ ...prev, curator: e.target.value }))}
+                        className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200 font-mono h-40 resize-y"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-zinc-500">Generator Prompt (video script)</label>
+                      <textarea
+                        value={prompts.generator || ''}
+                        onChange={(e) => setPrompts(prev => ({ ...prev, generator: e.target.value }))}
+                        className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200 font-mono h-40 resize-y"
+                      />
+                    </div>
+                  </div>
+                </Card>
+              )}
             </div>
           )}
 

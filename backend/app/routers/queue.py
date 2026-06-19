@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models.story import Story
+from ..models.scrape_settings import ScrapeSettings
 from ..schemas.story import StoryOut, StoryDetail
 
 
@@ -227,7 +228,14 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     ]
 
     try:
-        curation = await curate_stories(batch, deepseek_key)
+        # Load custom curator prompt if set
+        custom_prompt = ""
+        s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
+        s_obj = s_result.scalar_one_or_none()
+        if s_obj and s_obj.prompt_templates:
+            custom_prompt = s_obj.prompt_templates.get("curator", "")
+
+        curation = await curate_stories(batch, deepseek_key, custom_prompt=custom_prompt)
     except Exception as e:
         raise HTTPException(502, f"DeepSeek API error: {str(e)}")
 

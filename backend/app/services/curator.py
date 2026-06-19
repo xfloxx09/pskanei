@@ -34,12 +34,15 @@ Rules:
 
 
 async def curate_stories(
-    stories: list[dict],  # [{"id": "...", "title": "...", "score": 85, "source": "gdelt"}, ...]
+    stories: list[dict],
     api_key: str,
     endpoint: str = "https://api.deepseek.com",
+    custom_prompt: str = "",
 ) -> dict:
     if not api_key or not stories:
         return {"analyses": [], "top_pick_ids": []}
+
+    system_prompt = custom_prompt or CURATOR_PROMPT
 
     story_text = "\n".join(
         f'[id:{s["id"]}] score:{s.get("score",0)} source:{s.get("source","")} | {s["title"]}'
@@ -49,7 +52,7 @@ async def curate_stories(
     payload = {
         "model": "deepseek-chat",
         "messages": [
-            {"role": "system", "content": CURATOR_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Analyze these scraped news stories for viral potential:\n\n{story_text}"},
         ],
         "response_format": {"type": "json_object"},

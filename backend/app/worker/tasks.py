@@ -276,6 +276,17 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
         )
         all_providers = {p.id: p for p in providers_result.scalars().all()}
 
+        # Load custom prompts from settings
+        gen_prompt = ""
+        try:
+            from ..models.scrape_settings import ScrapeSettings
+            s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
+            s_obj = s_result.scalar_one_or_none()
+            if s_obj and s_obj.prompt_templates:
+                gen_prompt = s_obj.prompt_templates.get("generator", "")
+        except Exception:
+            pass
+
         def _get_key(provider_id: str) -> str:
             p = all_providers.get(provider_id)
             if p and p.api_key_encrypted:
@@ -301,7 +312,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
                     if not key:
                         continue
                     try:
-                        llm = cls(api_key=key)
+                        llm = cls(api_key=key, system_prompt=gen_prompt) if cls == DeepSeekProvider else cls(api_key=key)
                         prompt = await llm.generate_prompt(story.title, story.summary or "")
                         break
                     except Exception:
