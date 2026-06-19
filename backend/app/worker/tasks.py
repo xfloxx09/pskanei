@@ -280,22 +280,27 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
                 return decrypt(p.api_key_encrypted)
             return ""
 
-        # --- Step 1: Generate prompt (try LLM providers in order) ---
-        llm_providers = [
-            ("p1", DeepSeekProvider),
-            ("p5", OpenAIProvider),
+        # --- Step 1: Generate prompt (any enabled LLM with a key) ---
+        llm_classes = [
+            ("Prompt generation", DeepSeekProvider),
+            ("Prompt generation", OpenAIProvider),
         ]
         prompt = None
-        for pid, cls in llm_providers:
-            key = _get_key(pid)
-            if not key:
-                continue
-            try:
-                llm = cls(api_key=key)
-                prompt = await llm.generate_prompt(story.title, story.summary or "")
+        for role, cls in llm_classes:
+            for pid, p in all_providers.items():
+                if not p.enabled or p.role != role:
+                    continue
+                key = _get_key(pid)
+                if not key:
+                    continue
+                try:
+                    llm = cls(api_key=key)
+                    prompt = await llm.generate_prompt(story.title, story.summary or "")
+                    break
+                except Exception:
+                    continue
+            if prompt:
                 break
-            except Exception:
-                continue
 
         if not prompt:
             story.content["error"] = "No enabled LLM provider with valid API key"
@@ -306,24 +311,35 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         story.content["prompt"] = prompt
         await db.commit()
 
-        # --- Step 2: Generate TTS (try providers in order) ---
+        # --- Step 2: Generate TTS (any enabled TTS with a key, or Edge TTS for free) ---
         voiceover = prompt.get("voiceover_script", story.title)
-        tts_providers = [
-            ("p3", ElevenLabsProvider),
-            ("p6", OpenAITTSProvider),
-            ("edge_tts", EdgeTTSProvider),
+        tts_classes = [
+            ("Voiceover (TTS)", ElevenLabsProvider),
+            ("Voiceover (TTS)", OpenAITTSProvider),
         ]
         tts_url = None
-        for pid, cls in tts_providers:
-            key = _get_key(pid)
-            if not key:
-                continue
-            try:
-                tts = cls(api_key=key)
-                tts_url = await tts.generate_speech(voiceover)
+        for role, cls in tts_classes:
+            for pid, p in all_providers.items():
+                if not p.enabled or p.role != role:
+                    continue
+                key = _get_key(pid)
+                if not key:
+                    continue
+                try:
+                    tts = cls(api_key=key)
+                    tts_url = await tts.generate_speech(voiceover)
+                    break
+                except Exception:
+                    continue
+            if tts_url:
                 break
+
+        if not tts_url:
+            try:
+                edge = EdgeTTSProvider()
+                tts_url = await edge.generate_speech(voiceover)
             except Exception:
-                continue
+                pass
 
         if not tts_url:
             story.content["error"] = "No enabled TTS provider with valid API key"
@@ -334,25 +350,29 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         story.content["tts_url"] = tts_url
         await db.commit()
 
-        # --- Step 3: Render video (try providers in order) ---
-        video_providers = [
-            ("p2", CreatomateProvider),
-            ("p8", ShotstackProvider),
-            ("p9", JSON2VideoProvider),
-            ("p4", SynthesiaProvider),
-            ("p7", SynthesiaProvider),
+        # --- Step 3: Render video (any enabled video/avatar provider with a key) ---
+        video_classes = [
+            ("Video assembly", CreatomateProvider),
+            ("Video assembly", ShotstackProvider),
+            ("Video assembly", JSON2VideoProvider),
+            ("AI avatar narration", SynthesiaProvider),
         ]
         video_url = None
-        for pid, cls in video_providers:
-            key = _get_key(pid)
-            if not key:
-                continue
-            try:
-                video = cls(api_key=key)
-                video_url = await video.render_video(prompt, tts_url)
+        for role, cls in video_classes:
+            for pid, p in all_providers.items():
+                if not p.enabled or p.role != role:
+                    continue
+                key = _get_key(pid)
+                if not key:
+                    continue
+                try:
+                    video = cls(api_key=key)
+                    video_url = await video.render_video(prompt, tts_url)
+                    break
+                except Exception:
+                    continue
+            if video_url:
                 break
-            except Exception:
-                continue
 
         if not video_url:
             story.content["error"] = "No enabled video/avatar provider with valid API key"

@@ -57,13 +57,21 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
             return False
 
     missing = []
-    # Need at least one LLM provider with a key (p1=DeepSeek, p5=OpenAI)
-    if not _has_key("p1") and not _has_key("p5"):
-        missing.append("LLM (DeepSeek or OpenAI)")
+    # Check by role, not by hardcoded ID — works with custom providers too
+    has_llm = any(
+        _has_key(p.id) for p in all_providers.values()
+        if p.role and "prompt" in p.role.lower()
+    )
+    has_video = any(
+        _has_key(p.id) for p in all_providers.values()
+        if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())
+    )
+
+    if not has_llm:
+        missing.append("LLM (DeepSeek, OpenAI, etc.)")
     # TTS: Edge TTS is always available for free, so never missing
-    # Need at least one video provider with a key (p2=Creatomate, p8=Shotstack, p9=JSON2Video, p4=HeyGen, p7=Synthesia)
-    if not _has_key("p2") and not _has_key("p8") and not _has_key("p9") and not _has_key("p4") and not _has_key("p7"):
-        missing.append("Video assembly (Creatomate, Shotstack, etc.)")
+    if not has_video:
+        missing.append("Video assembly (Creatomate, Shotstack, HeyGen, etc.)")
 
     if missing:
         raise HTTPException(400, f"Missing API keys: {', '.join(missing)}. Set them in AI Providers tab.")
