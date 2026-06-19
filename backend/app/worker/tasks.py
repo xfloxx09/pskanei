@@ -246,6 +246,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         OpenAIProvider,
         ElevenLabsProvider,
         OpenAITTSProvider,
+        EdgeTTSProvider,
         CreatomateProvider,
         ShotstackProvider,
         JSON2VideoProvider,
@@ -310,6 +311,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
         tts_providers = [
             ("p3", ElevenLabsProvider),
             ("p6", OpenAITTSProvider),
+            ("edge_tts", EdgeTTSProvider),
         ]
         tts_url = None
         for pid, cls in tts_providers:

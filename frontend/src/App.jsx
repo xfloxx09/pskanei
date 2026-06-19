@@ -46,6 +46,7 @@ const PROVIDER_DEFAULTS = [
   { id: 'p5', name: 'OpenAI', role: 'Prompt generation', apiKey: '', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' },
   { id: 'p3', name: 'ElevenLabs', role: 'Voiceover (TTS)', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://elevenlabs.io/app/settings/api-keys' },
   { id: 'p6', name: 'OpenAI TTS', role: 'Voiceover (TTS)', apiKey: '', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'edge_tts', name: 'Edge TTS', role: 'Voiceover (TTS)', apiKey: '', endpoint: '', enabled: true, keyUrl: '' },
   { id: 'p2', name: 'Creatomate', role: 'Video assembly', apiKey: '', endpoint: '', enabled: true, keyUrl: 'https://creatomate.com/dashboard/api-key' },
   { id: 'p8', name: 'Shotstack', role: 'Video assembly', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://shotstack.io/dashboard' },
   { id: 'p9', name: 'JSON2Video', role: 'Video assembly', apiKey: '', endpoint: '', enabled: false, keyUrl: 'https://json2video.com/dashboard' },
@@ -757,6 +758,9 @@ export default function ViralClipStudioAdmin() {
                       </button>
                       <button onClick={() => addKnownProvider({ name: 'OpenAI TTS', role: 'Voiceover (TTS)', endpoint: 'https://api.openai.com', enabled: false, keyUrl: 'https://platform.openai.com/api-keys' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
                         OpenAI TTS <span className="text-xs text-zinc-500">tts-1</span>
+                      </button>
+                      <button onClick={() => addKnownProvider({ name: 'Edge TTS', role: 'Voiceover (TTS)', endpoint: '', enabled: true, keyUrl: '' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
+                        Edge TTS <span className="text-xs text-emerald-400">FREE · no key needed</span>
                       </button>
                       <div className="p-2 text-xs text-zinc-500 uppercase tracking-wide border-t border-zinc-800 mt-1">Video assembly</div>
                       <button onClick={() => addKnownProvider({ name: 'Creatomate', role: 'Video assembly', endpoint: '', enabled: true, keyUrl: 'https://creatomate.com/dashboard/api-key' })} className="w-full text-left px-3 py-2 text-sm text-zinc-300 hover:bg-zinc-800 flex justify-between items-center">
