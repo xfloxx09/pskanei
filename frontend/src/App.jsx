@@ -173,6 +173,7 @@ export default function ViralClipStudioAdmin() {
   const [showAddProvider, setShowAddProvider] = useState(false);
   const [prompts, setPrompts] = useState({ curator: '', generator: '' });
   const [showPrompts, setShowPrompts] = useState(false);
+  const [analysisLog, setAnalysisLog] = useState(null);
 
   const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
@@ -938,8 +939,8 @@ export default function ViralClipStudioAdmin() {
                     setLoading(true);
                     try {
                       const res = await fetchJSON(`${API}/queue/curate`, { method: 'POST' });
-                      const errs = (res.errors || []).slice(0, 3).join(', ');
-                      showToast(`${res.analyzed}/${res.total} tagged. ${res.top_pick_ids?.length || 0} picks. ${errs ? 'Errors: ' + errs : ''}`, 15000);
+                      setAnalysisLog(res);
+                      showToast(`${res.analyzed}/${res.total} stories tagged. ${res.top_pick_ids?.length || 0} top picks.`, 10000);
                       loadQueue();
                     } catch (e) { showToast(`Curate failed: ${e.message}`); }
                     finally { setLoading(false); }
@@ -951,6 +952,26 @@ export default function ViralClipStudioAdmin() {
                   </button>
                 </div>
               </div>
+
+              {analysisLog && (
+                <Card className="p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-zinc-300">Analysis Log</span>
+                    <button onClick={() => setAnalysisLog(null)} className="text-xs text-zinc-500 hover:text-zinc-300">Clear</button>
+                  </div>
+                  <div className="text-xs text-zinc-400">
+                    {analysisLog.analyzed}/{analysisLog.total} tagged · {analysisLog.top_pick_ids?.length || 0} top picks
+                  </div>
+                  {analysisLog.errors?.length > 0 && (
+                    <div className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                      <div className="text-xs text-rose-400 mb-1">Errors ({analysisLog.errors.length}):</div>
+                      {analysisLog.errors.map((e, i) => (
+                        <div key={i} className="text-xs text-rose-300 bg-rose-950/50 rounded px-2 py-1 font-mono break-all">{e}</div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )}
 
               <Card>
                 <div className="flex flex-col divide-y divide-zinc-800">
