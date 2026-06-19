@@ -321,17 +321,33 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
     import json as _json
     from sqlalchemy import text as _text
 
-    async def _update_story(sid, updates: dict):
+    def _raw_sql(sql, params):
+        """Execute raw SQL on a fresh connection, bypassing the ORM session."""
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from ..config import settings as _settings
+        eng = create_async_engine(_settings.async_database_url)
+        async def _run():
+            async with eng.connect() as conn:
+                await conn.execute(_text(sql), params)
+                await conn.commit()
+        import asyncio as _asyncio
+        try:
+            _asyncio.get_event_loop()
+            _asyncio.create_task(_run())
+        except RuntimeError:
+            pass
+
+    def _update_story_sync(sid, updates: dict):
         for key, val in updates.items():
             val_json = _json.dumps(val)
-            await db.execute(
-                _text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid"),
+            _raw_sql(
+                "UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid",
                 {"path": "{" + key + "}", "val": val_json, "id": sid},
             )
 
-    async def _update_status(sid, status: str):
-        await db.execute(
-            _text("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid"),
+    def _update_status_sync(sid, status: str):
+        _raw_sql(
+            "UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid",
             {"st": status, "id": sid},
         )
 
@@ -352,8 +368,8 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         story.content["status_msg"] = "Starting..."
         await db.commit()
         # Also write via raw SQL to guarantee persistence
-        await _update_status(story_id, "generating")
-        await _update_story(story_id, {"status_msg": "Starting..."})
+        await _update_status_sync(story_id, "generating")
+        await _update_story_sync(story_id, {"status_msg": "Starting..."})
 
         providers_result = await db.execute(
             select(Provider).where(Provider.enabled.is_(True))
@@ -408,16 +424,16 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not prompt:
             err_msg = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
-            await _update_status(story_id, "failed")
-            await _update_story(story_id, {"error": err_msg, "status_msg": "LLM failed"})
+            await _update_status_sync(story_id, "failed")
+            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
         await db.commit()
-        await _update_story(story_id, {"prompt": prompt})
+        await _update_story_sync(story_id, {"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
-        await _update_story(story_id, {"status_msg": "Generating voiceover..."})
+        await _update_story_sync(story_id, {"status_msg": "Generating voiceover..."})
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -451,14 +467,14 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not tts_url:
             err_msg = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
-            await _update_status(story_id, "failed")
-            await _update_story(story_id, {"error": err_msg, "status_msg": "TTS failed"})
+            await _update_status_sync(story_id, "failed")
+            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "TTS failed"})
             return {"status": "error", "reason": err_msg}
 
-        await _update_story(story_id, {"tts_url": tts_url})
+        await _update_story_sync(story_id, {"tts_url": tts_url})
 
         # --- Step 3: Render video ---
-        await _update_story(story_id, {"status_msg": "Rendering video..."})
+        await _update_story_sync(story_id, {"status_msg": "Rendering video..."})
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -486,15 +502,15 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not video_url:
             err_msg = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
-            await _update_status(story_id, "failed")
-            await _update_story(story_id, {"error": err_msg, "status_msg": "Video failed"})
+            await _update_status_sync(story_id, "failed")
+            await _update_story_sync(story_id, {"error": err_msg, "status_msg": "Video failed"})
             return {"status": "error", "reason": err_msg}
 
-        await _update_story(story_id, {"video_url": video_url})
+        await _update_story_sync(story_id, {"video_url": video_url})
 
         # --- Step 4: Finalize ---
-        await _update_status(story_id, "ready")
-        await _update_story(story_id, {"status_msg": "Ready"})
+        await _update_status_sync(story_id, "ready")
+        await _update_story_sync(story_id, {"status_msg": "Ready"})
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
