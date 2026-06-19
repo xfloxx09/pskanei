@@ -715,7 +715,6 @@ export default function ViralClipStudioAdmin() {
                               <ExternalLink className="h-3 w-3" /> Get API key
                             </a>
                           )}
-                          </div>
                         </div>
                         <div className="col-span-2">
                           <label className="mb-1 block text-xs text-zinc-500">Endpoint (optional override)</label>
