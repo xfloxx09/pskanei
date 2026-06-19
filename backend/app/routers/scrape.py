@@ -115,17 +115,9 @@ async def debug_scrape(source_id: str):
 
 @router.post("/trigger")
 async def trigger_scrape():
-    try:
-        from ..worker.tasks import scrape_and_score
-        result = scrape_and_score.delay()
-        return {"success": True, "job_id": result.id, "mode": "celery"}
-    except Exception:
-        pass
-
     from ..worker.tasks import _run_scrape_pipeline
     try:
         data = await _run_scrape_pipeline()
     except Exception as e:
-        return {"success": False, "error": str(e), "mode": "sync"}
-
-    return {"success": True, "mode": "sync", "detail": data}
+        return {"success": False, "error": str(e)}
+    return {"success": True, "detail": data, "mode": "sync"}

@@ -133,9 +133,9 @@ export default function ViralClipStudioAdmin() {
   const [loading, setLoading] = useState(false);
   const [scraping, setScraping] = useState(false);
 
-  const showToast = useCallback((msg) => {
+  const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
-    setTimeout(() => setToast(''), 8000);
+    setTimeout(() => setToast(''), duration);
   }, []);
 
   // --- Load data on mount and tab switch ---
@@ -340,11 +340,29 @@ export default function ViralClipStudioAdmin() {
     setScraping(true);
     try {
       const data = await fetchJSON(`${API}/scrape/trigger`, { method: 'POST' });
-      showToast('RAW: ' + JSON.stringify(data).substring(0, 300));
+      const detail = data?.detail || {};
+      const saved = detail?.stories_saved ?? 0;
+      const status = detail?.status ?? 'done';
+      const counts = detail?.source_counts || {};
+      const errors = detail?.source_errors || {};
+
+      if (data?.error) {
+        showToast(`Scrape failed: ${data.error}`);
+      } else if (status === 'skipped') {
+        const countStr = Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(', ');
+        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
+        const info = [countStr, errStr].filter(Boolean).join(' | ');
+        showToast(`${detail?.reason || 'Scrape skipped'}${info ? ` (${info})` : ''}`, 10000);
+      } else if (saved > 0) {
+        showToast(`${saved} stories found`, 5000);
+      } else {
+        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
+        showToast(`No stories found${errStr ? ' — ' + errStr : ''}`, 10000);
+      }
       await loadQueue();
       await loadStatus();
     } catch (e) {
-      showToast(`Scrape failed: ${e.message}`);
+      showToast(`Scrape failed: ${e.message}`, 10000);
     } finally {
       setScraping(false);
     }
