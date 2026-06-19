@@ -255,41 +255,46 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
             errors.append(last_error)
 
     updated = 0
+    # Use raw SQL UPDATE to guarantee writes
+    import json as _json
+    from sqlalchemy import text as _text
+    updated = 0
     for sid, analysis in all_analyses.items():
         try:
-            story_obj = await db.get(Story, UUID(sid))
-            if story_obj:
-                story_obj.content = story_obj.content or {}
-                story_obj.content["ai_curation"] = {
-                    "category": analysis.get("category", ""),
-                    "viral_score": analysis.get("viral_score", 0),
-                    "hook_angle": analysis.get("hook_angle", ""),
-                    "reasoning": analysis.get("reasoning", ""),
-                    "is_top_pick": False,
-                }
-                updated += 1
-        except Exception:
-            pass
-
-    sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
-    top_ids = set()
-    for a in sorted_all[:3]:
-        for tid, av in all_analyses.items():
-            if av is a:
-                top_ids.add(tid)
-                try:
-                    ts = await db.get(Story, UUID(tid))
-                    if ts and ts.content and "ai_curation" in ts.content:
-                        ts.content["ai_curation"]["is_top_pick"] = True
-                except Exception:
-                    pass
-                break
+            curation_json = _json.dumps({
+                "category": analysis.get("category", ""),
+                "viral_score": analysis.get("viral_score", 0),
+                "hook_angle": analysis.get("hook_angle", ""),
+                "reasoning": analysis.get("reasoning", ""),
+                "is_top_pick": False,
+            })
+            await db.execute(
+                _text("UPDATE stories SET content = jsonb_set(COALESCE(content::jsonb, '{}'), '{ai_curation}', :val::jsonb) WHERE id = :id"),
+                {"val": curation_json, "id": sid},
+            )
+            updated += 1
+        except Exception as e:
+            errors.append(f"DB update failed: {e}")
 
     await db.commit()
+
+    # Top 3 picks by AI viral_score
+    sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
+    top_ids = [k for k, v in all_analyses.items() if v in sorted_all[:3]][:3]
+    for tid in top_ids:
+        try:
+            await db.execute(
+                _text("UPDATE stories SET content = jsonb_set(COALESCE(content::jsonb, '{}'), '{ai_curation,is_top_pick}', 'true'::jsonb) WHERE id = :id"),
+                {"id": tid},
+            )
+        except Exception:
+            pass
+    await db.commit()
+
     return {
         "success": True,
         "analyzed": len(all_analyses),
-        "top_pick_ids": list(top_ids),
+        "top_pick_ids": top_ids,
         "total": len(batch),
         "errors": errors[:10],
     }
