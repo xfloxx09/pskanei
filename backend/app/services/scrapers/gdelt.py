@@ -29,41 +29,67 @@ class GDELTScraper(BaseScraper):
             resp = await client.get(GAPI_URL, params=params)
             resp.raise_for_status()
             text = resp.text
-
-        if not text.strip():
-            raise RuntimeError("GDELT returned empty response")
-
-        try:
             data = resp.json()
-        except Exception:
-            raise RuntimeError(f"GDELT invalid JSON: {text[:300]}")
 
-        articles = data.get("articles", [])
-        if not articles:
-            keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
-            raw_preview = text[:500]
-            raise RuntimeError(f"GDELT 0 articles. type={type(data).__name__}, keys={keys}, text={raw_preview}")
+        raw_articles = (
+            data.get("articles")
+            or data.get("results")
+            or data.get("data")
+            or data.get("items")
+            or []
+        )
+
+        if not raw_articles:
+            if isinstance(data, list):
+                raw_articles = data
+            elif isinstance(data, dict):
+                for v in data.values():
+                    if isinstance(v, list) and len(v) > 0:
+                        raw_articles = v
+                        break
+
+        if not raw_articles:
+            keys = list(data.keys()) if isinstance(data, dict) else None
+            raise RuntimeError(
+                f"GDELT: 0 articles. keys={keys}, text={text[:400]}"
+            )
 
         stories: list[RawStory] = []
-        for article in articles:
-            title = (article.get("title") or "").strip()
-            url = (article.get("url") or "").strip()
-            if not title or not url:
+        for article in raw_articles:
+            if not isinstance(article, dict):
                 continue
+            title = (
+                (article.get("title") or article.get("name") or "").strip()
+            )
+            url = (
+                article.get("url")
+                or article.get("link")
+                or article.get("url_mobile")
+                or ""
+            ).strip()
+
+            if not title:
+                continue
+
             tone = article.get("tone", {})
             stories.append(
                 RawStory(
                     title=title,
-                    url=url,
+                    url=url or f"https://news.google.com/search?q={title.replace(' ', '+')}",
                     source=self.source_id,
-                    summary=article.get("seendate", ""),
+                    summary=article.get("seendate", article.get("description", "")),
                     engagement={
-                        "tone_avg": tone.get("tone", 0),
-                        "tone_pos": tone.get("positive_score", 0),
-                        "tone_neg": tone.get("negative_score", 0),
+                        "tone_avg": tone.get("tone", 0) if isinstance(tone, dict) else 0,
                         "shares_gdelt": article.get("numarts", 1),
                     },
                     published_at=datetime.now(timezone.utc),
                 )
             )
+
+        if not stories:
+            first = raw_articles[0] if raw_articles else {}
+            raise RuntimeError(
+                f"GDELT: {len(raw_articles)} articles but all filtered (need title). First keys: {list(first.keys()) if isinstance(first, dict) else 'not dict'}"
+            )
+
         return stories

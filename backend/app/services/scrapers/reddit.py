@@ -20,14 +20,13 @@ class RedditScraper(BaseScraper):
     async def fetch(self, time_window: str) -> list[RawStory]:
         t_param = _parse_window(time_window)
         headers = {
-            "User-Agent": "ViralClipStudio/1.0 (by /u/xfloxx09)",
+            "User-Agent": "Mozilla/5.0 (compatible; ViralClipStudio/1.0; by /u/xfloxx09)",
             "Accept": "application/json",
         }
 
         stories: list[RawStory] = []
         errors = []
-        empty_responses = 0
-        first_response_preview = ""
+        response_preview = ""
 
         async with httpx.AsyncClient(timeout=30, headers=headers, follow_redirects=True) as client:
             for sub in SUBREDDITS:
@@ -38,28 +37,32 @@ class RedditScraper(BaseScraper):
                         resp = await client.get(url, params=params)
                         resp.raise_for_status()
                         text = resp.text
-
-                        if not first_response_preview:
-                            first_response_preview = text[:300]
+                        if not response_preview:
+                            response_preview = f"r/{sub}/{sort} status={resp.status_code} body={text[:250]}"
 
                         if not text.strip():
-                            empty_responses += 1
                             continue
 
                         data = resp.json()
-                        children = data.get("data", {}).get("children", [])
 
-                        if not children:
-                            empty_responses += 1
-                            continue
+                        children = []
+                        if isinstance(data, dict):
+                            children = (
+                                data.get("data", {}).get("children", [])
+                                or data.get("children", [])
+                            )
+                        elif isinstance(data, list):
+                            children = data
 
                         for child in children:
-                            post = child.get("data", {})
+                            if not isinstance(child, dict):
+                                continue
+                            post = child.get("data", child)
                             title = (post.get("title") or "").strip()
-                            permalink = post.get("permalink", "")
-                            post_url = f"https://www.reddit.com{permalink}" if permalink else ""
                             if not title:
                                 continue
+                            permalink = post.get("permalink", "")
+                            post_url = f"https://www.reddit.com{permalink}" if permalink else post.get("url", post.get("url_overridden_by_dest", ""))
                             stories.append(
                                 RawStory(
                                     title=title,
@@ -67,11 +70,9 @@ class RedditScraper(BaseScraper):
                                     source=self.source_id,
                                     summary=post.get("selftext", "")[:300] or post.get("url_overridden_by_dest", ""),
                                     engagement={
-                                        "ups": post.get("ups", 0),
+                                        "ups": post.get("ups", post.get("score", 0)),
                                         "num_comments": post.get("num_comments", 0),
-                                        "score": post.get("score", 0),
                                         "subreddit": post.get("subreddit", ""),
-                                        "over_18": post.get("over_18", False),
                                     },
                                     published_at=datetime.fromtimestamp(
                                         post.get("created_utc", 0), tz=timezone.utc
@@ -84,10 +85,9 @@ class RedditScraper(BaseScraper):
                         errors.append(f"r/{sub}/{sort}: {exc}")
 
         if not stories:
-            if empty_responses == 4:
-                raise RuntimeError(f"Reddit: all 4 feeds empty. First response: {first_response_preview}")
+            detail = f"preview: {response_preview}"
             if errors:
-                raise RuntimeError("; ".join(errors))
-            raise RuntimeError(f"Reddit: no stories, {empty_responses}/4 empty. First response: {first_response_preview}")
+                detail += " | errors: " + "; ".join(errors)
+            raise RuntimeError(detail)
 
         return stories
