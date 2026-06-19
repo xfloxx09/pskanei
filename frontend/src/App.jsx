@@ -791,9 +791,33 @@ export default function ViralClipStudioAdmin() {
                   <h1 className="text-lg font-medium text-zinc-100">Story queue</h1>
                   <p className="text-sm text-zinc-500">Review scraped candidates before they're sent to the create pipeline.</p>
                 </div>
-                <button onClick={refreshQueue} className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900">
-                  <RefreshCw className="h-3.5 w-3.5" /> Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={async () => {
+                    if (!confirm('Delete ALL stories?')) return;
+                    try {
+                      const res = await fetchJSON(`${API}/queue`, { method: 'DELETE' });
+                      showToast(`${res.deleted} stories cleared`);
+                      loadQueue();
+                      loadStatus();
+                    } catch (e) { showToast(`Error: ${e.message}`); }
+                  }} className="flex items-center gap-1.5 rounded-md border border-rose-800 px-3 py-1.5 text-sm text-rose-400 hover:bg-rose-950">
+                    <Trash2 className="h-3.5 w-3.5" /> Clear all
+                  </button>
+                  <button onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const res = await fetchJSON(`${API}/queue/curate`, { method: 'POST' });
+                      showToast(`AI analyzed ${res.analyzed} stories. Top picks: ${res.top_pick_ids.length}`);
+                      loadQueue();
+                    } catch (e) { showToast(`Curate failed: ${e.message}`); }
+                    finally { setLoading(false); }
+                  }} disabled={loading} className="flex items-center gap-1.5 rounded-md border border-purple-800 px-3 py-1.5 text-sm text-purple-400 hover:bg-purple-950">
+                    <Sparkles className="h-3.5 w-3.5" /> {loading ? 'Analyzing...' : 'Analyze'}
+                  </button>
+                  <button onClick={refreshQueue} className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900">
+                    <RefreshCw className="h-3.5 w-3.5" /> Refresh
+                  </button>
+                </div>
               </div>
 
               <Card>

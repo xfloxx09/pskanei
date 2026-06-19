@@ -113,3 +113,74 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
 
     return {"success": True, "story": StoryOut.model_validate(story)}
+
+
+@router.delete("")
+async def clear_queue(
+    status: str | None = Query(None, description="Only delete stories with this status"),
+    db: AsyncSession = Depends(get_db),
+):
+    from sqlalchemy import delete
+    stmt = delete(Story)
+    if status:
+        stmt = stmt.where(Story.status == status)
+    result = await db.execute(stmt)
+    await db.commit()
+    return {"deleted": result.rowcount}
+
+
+@router.post("/curate")
+async def curate_queue(db: AsyncSession = Depends(get_db)):
+    from ..models.provider import Provider
+    from ..services.crypto import decrypt
+    from ..services.curator import curate_stories
+
+    provider_row = await db.get(Provider, "p1")
+    deepseek_key = ""
+    if provider_row and provider_row.enabled and provider_row.api_key_encrypted:
+        try:
+            deepseek_key = decrypt(provider_row.api_key_encrypted)
+        except Exception:
+            pass
+
+    if not deepseek_key:
+        raise HTTPException(400, "DeepSeek API key not configured in AI Providers tab")
+
+    result = await db.execute(
+        select(Story)
+        .order_by(Story.score.desc())
+        .limit(50)
+    )
+    stories = result.scalars().all()
+
+    if not stories:
+        raise HTTPException(404, "No stories in queue")
+
+    batch = [
+        {"id": str(s.id), "title": s.title, "score": s.score, "source": s.source}
+        for s in stories
+    ]
+
+    curation = await curate_stories(batch, deepseek_key)
+    analyses = {a["id"]: a for a in curation.get("analyses", [])}
+    top_ids = set(curation.get("top_pick_ids", []))
+    updated = 0
+
+    for sid, analysis in analyses.items():
+        try:
+            s = await db.get(Story, UUID(sid))
+            if s:
+                s.content = s.content or {}
+                s.content["ai_curation"] = {
+                    "category": analysis.get("category", ""),
+                    "viral_score": analysis.get("viral_score", 0),
+                    "hook_angle": analysis.get("hook_angle", ""),
+                    "reasoning": analysis.get("reasoning", ""),
+                    "is_top_pick": sid in top_ids,
+                }
+                updated += 1
+        except (ValueError, TypeError):
+            pass
+
+    await db.commit()
+    return {"success": True, "analyzed": updated, "top_pick_ids": list(top_ids)}
