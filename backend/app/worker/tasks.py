@@ -279,13 +279,16 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
     try:
         return await _run_create_pipeline_inner(story_id, skip_budget_check, skip_prompt)
     except Exception as e:
-        # Write error directly with raw SQL to guarantee persistence
         from ..database import async_session
-        from sqlalchemy import text as _text
         async with async_session() as err_db:
+            from sqlalchemy import select, text as _text
+            # Use raw SQL with properly quoted JSON
+            import json as _json
+            err_sql = _json.dumps(str(e)[:500])
+            msg_sql = _json.dumps(("Crash: " + str(e))[:80])
             await err_db.execute(
-                _text("UPDATE stories SET status = 'failed', content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', CAST(:err AS jsonb), true), '{status_msg}', CAST(:msg AS jsonb), true) WHERE id = CAST(:id AS uuid)"),
-                {"err": str(e)[:500], "msg": ("Crash: " + str(e))[:80], "id": story_id},
+                _text("UPDATE stories SET status = 'failed', content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', :err::jsonb, true), '{status_msg}', :msg::jsonb, true) WHERE id = :id::uuid"),
+                {"err": err_sql, "msg": msg_sql, "id": story_id},
             )
             await err_db.commit()
         return {"status": "error", "reason": str(e)}
