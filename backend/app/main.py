@@ -1,7 +1,11 @@
+import os
+
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +26,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Viral Clip Studio",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -62,3 +66,18 @@ async def status(db: AsyncSession = Depends(get_db)):
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+# --- Serve frontend static files (after all API routes) ---
+
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "static")
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend():
+        index = os.path.join(STATIC_DIR, "index.html")
+        if os.path.isfile(index):
+            return FileResponse(index)
+        return {"status": "ok", "message": "API running, frontend not built"}

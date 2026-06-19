@@ -40,3 +40,7 @@ celerybeat.pid
 # Rendered video / temp
 media/
 tmp/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
