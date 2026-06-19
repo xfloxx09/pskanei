@@ -229,3 +229,38 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
 
     await db.commit()
     return {"success": True, "analyzed": updated, "top_pick_ids": list(top_ids)}
+
+
+@router.patch("/{story_id}/prompt")
+async def save_prompt(story_id: UUID, body: dict, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    story.content = story.content or {}
+    story.content["prompt"] = {
+        **story.content.get("prompt", {}),
+        **body,
+    }
+    await db.commit()
+    return {"success": True}
+
+
+@router.post("/{story_id}/generate-video")
+async def generate_video(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    if not (story.content or {}).get("prompt"):
+        raise HTTPException(400, "No prompt to render. Run generation first.")
+
+    from ..worker.tasks import _run_create_pipeline
+    import asyncio
+
+    story.status = "generating"
+    story.content["status_msg"] = "Starting video render..."
+    story.content.pop("error", None)
+    await db.commit()
+
+    asyncio.create_task(_run_create_pipeline(str(story_id), skip_prompt=True))
+
+    return {"success": True}

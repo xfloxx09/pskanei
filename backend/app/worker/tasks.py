@@ -229,7 +229,7 @@ async def _run_scrape_pipeline():
         }
 
 
-async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
+async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, skip_prompt: bool = False):
     import os
 
     os.environ.setdefault("ENVIRONMENT", "production")
@@ -282,36 +282,39 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False):
                 return decrypt(p.api_key_encrypted)
             return ""
 
-        # --- Step 1: Generate prompt (any enabled LLM with a key) ---
-        story.content["status_msg"] = "Generating AI prompt..."
-        await db.commit()
-        llm_classes = [
-            ("Prompt generation", DeepSeekProvider),
-            ("Prompt generation", OpenAIProvider),
-        ]
-        prompt = None
-        for role, cls in llm_classes:
-            for pid, p in all_providers.items():
-                if not p.enabled or p.role != role:
-                    continue
-                key = _get_key(pid)
-                if not key:
-                    continue
-                try:
-                    llm = cls(api_key=key)
-                    prompt = await llm.generate_prompt(story.title, story.summary or "")
-                    break
-                except Exception:
-                    continue
-            if prompt:
-                break
-
-        if not prompt:
-            story.content["error"] = "No enabled LLM provider with valid API key"
-            story.content["status_msg"] = "No LLM"
-            story.status = "failed"
+        # --- Step 1: Generate prompt (skip if re-rendering with existing prompt) ---
+        if skip_prompt:
+            prompt = story.content.get("prompt")
+        else:
+            prompt = None
+            story.content["status_msg"] = "Generating AI prompt..."
             await db.commit()
-            raise RuntimeError(story.content["error"])
+            llm_classes = [
+                ("Prompt generation", DeepSeekProvider),
+                ("Prompt generation", OpenAIProvider),
+            ]
+            for role, cls in llm_classes:
+                for pid, p in all_providers.items():
+                    if not p.enabled or p.role != role:
+                        continue
+                    key = _get_key(pid)
+                    if not key:
+                        continue
+                    try:
+                        llm = cls(api_key=key)
+                        prompt = await llm.generate_prompt(story.title, story.summary or "")
+                        break
+                    except Exception:
+                        continue
+                if prompt:
+                    break
+
+            if not prompt:
+                story.content["error"] = "No enabled LLM provider with valid API key"
+                story.content["status_msg"] = "No LLM"
+                story.status = "failed"
+                await db.commit()
+                raise RuntimeError(story.content["error"])
 
         story.content["prompt"] = prompt
         await db.commit()

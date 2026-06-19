@@ -1060,15 +1060,64 @@ export default function ViralClipStudioAdmin() {
 
               {previewStory.content?.prompt && (
                 <div>
-                  <div className="text-xs text-zinc-500 mb-1">Generated Prompt (DeepSeek)</div>
-                  <div className="p-3 rounded-lg bg-zinc-950 max-h-60 overflow-y-auto">
-                    <div className="text-xs text-zinc-400 mb-2">Visual Description</div>
-                    <div className="text-zinc-300">{previewStory.content.prompt?.visual_description || '—'}</div>
-                    <div className="text-xs text-zinc-400 mb-2 mt-3">Voiceover Script</div>
-                    <div className="text-zinc-300">{previewStory.content.prompt?.voiceover_script || '—'}</div>
-                    <div className="text-xs text-zinc-400 mb-2 mt-3">Hook Text</div>
-                    <div className="text-amber-300 font-medium">{previewStory.content.prompt?.hook_text || '—'}</div>
+                  <div className="text-xs text-zinc-500 mb-1 flex items-center justify-between">
+                    <span>Generated Prompt</span>
+                    <button onClick={async () => {
+                      const p = previewStory.content.prompt;
+                      try {
+                        await fetchJSON(`${API}/queue/${previewStory.id}/prompt`, {
+                          method: 'PATCH',
+                          headers: {'Content-Type': 'application/json'},
+                          body: JSON.stringify(p),
+                        });
+                        showToast('Prompt saved');
+                      } catch(e) { showToast(`Error: ${e.message}`); }
+                    }} className="text-xs text-amber-400 hover:underline">Save edits</button>
                   </div>
+                  <div className="space-y-2">
+                    <textarea
+                      value={previewStory.content.prompt?.visual_description || ''}
+                      onChange={(e) => setPreviewStory(prev => ({
+                        ...prev,
+                        content: {...prev.content, prompt: {...prev.content.prompt, visual_description: e.target.value}}
+                      }))}
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 h-20 resize-y"
+                      placeholder="Visual description..."
+                    />
+                    <textarea
+                      value={previewStory.content.prompt?.voiceover_script || ''}
+                      onChange={(e) => setPreviewStory(prev => ({
+                        ...prev,
+                        content: {...prev.content, prompt: {...prev.content.prompt, voiceover_script: e.target.value}}
+                      }))}
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-zinc-200 h-24 resize-y"
+                      placeholder="Voiceover script..."
+                    />
+                    <input
+                      value={previewStory.content.prompt?.hook_text || ''}
+                      onChange={(e) => setPreviewStory(prev => ({
+                        ...prev,
+                        content: {...prev.content, prompt: {...prev.content.prompt, hook_text: e.target.value}}
+                      }))}
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-amber-300 font-medium"
+                      placeholder="Hook text..."
+                    />
+                  </div>
+                  <button onClick={async () => {
+                    try {
+                      await fetchJSON(`${API}/queue/${previewStory.id}/prompt`, {
+                        method: 'PATCH',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(previewStory.content.prompt),
+                      });
+                      await fetchJSON(`${API}/queue/${previewStory.id}/generate-video`, {method: 'POST'});
+                      showToast('Regenerating video...');
+                      setPreviewStory(null);
+                      loadQueue();
+                    } catch(e) { showToast(`Error: ${e.message}`); }
+                  }} className="mt-2 w-full rounded-md bg-amber-500 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400">
+                    <Sparkles className="inline h-3.5 w-3.5 mr-1" /> Regenerate Video
+                  </button>
                 </div>
               )}
 
