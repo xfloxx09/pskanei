@@ -276,6 +276,22 @@ async def _run_scrape_pipeline():
 
 
 async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, skip_prompt: bool = False):
+    try:
+        return await _run_create_pipeline_inner(story_id, skip_budget_check, skip_prompt)
+    except Exception as e:
+        # Write error directly with raw SQL to guarantee persistence
+        from ..database import async_session
+        from sqlalchemy import text as _text
+        async with async_session() as err_db:
+            await err_db.execute(
+                _text("UPDATE stories SET status = 'failed', content = jsonb_set(jsonb_set(COALESCE(content, '{}'), '{error}', CAST(:err AS jsonb), true), '{status_msg}', CAST(:msg AS jsonb), true) WHERE id = CAST(:id AS uuid)"),
+                {"err": str(e)[:500], "msg": ("Crash: " + str(e))[:80], "id": story_id},
+            )
+            await err_db.commit()
+        return {"status": "error", "reason": str(e)}
+
+
+async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = False, skip_prompt: bool = False):
     import os
 
     os.environ.setdefault("ENVIRONMENT", "production")
