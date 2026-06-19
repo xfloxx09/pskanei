@@ -83,7 +83,34 @@ async def update_settings(body: ScrapeSettingsIn, db: AsyncSession = Depends(get
     return {"success": True}
 
 
-@router.post("/trigger")
+@router.get("/debug/scrape/{source_id}")
+async def debug_scrape(source_id: str):
+    from ..services.scrapers import (
+        GDELTScraper,
+        RedditScraper,
+        NewsAPIScraper,
+        YouTubeTrendingScraper,
+    )
+    scrapers = {
+        "gdelt": GDELTScraper,
+        "reddit": RedditScraper,
+        "newsapi": NewsAPIScraper,
+        "ytrending": YouTubeTrendingScraper,
+    }
+    cls = scrapers.get(source_id)
+    if not cls:
+        return {"error": f"unknown source: {source_id}"}
+
+    try:
+        scraper = cls()
+        stories = await scraper.fetch("6h")
+        return {
+            "source": source_id,
+            "count": len(stories),
+            "titles": [s.title[:80] for s in stories[:5]],
+        }
+    except Exception as e:
+        return {"source": source_id, "error": str(e)}
 async def trigger_scrape():
     try:
         from ..worker.tasks import scrape_and_score

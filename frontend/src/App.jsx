@@ -340,25 +340,7 @@ export default function ViralClipStudioAdmin() {
     setScraping(true);
     try {
       const data = await fetchJSON(`${API}/scrape/trigger`, { method: 'POST' });
-      const detail = data?.detail || {};
-      const saved = detail?.stories_saved ?? 0;
-      const status = detail?.status ?? 'done';
-      const counts = detail?.source_counts || {};
-      const errors = detail?.source_errors || {};
-
-      if (data?.error) {
-        showToast(`Scrape failed: ${data.error}`);
-      } else if (status === 'skipped') {
-        const countStr = Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(', ');
-        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
-        const info = [countStr, errStr].filter(Boolean).join(' | ');
-        showToast(`${detail?.reason || 'Scrape skipped'}${info ? ` (${info})` : ''}`);
-      } else if (saved > 0) {
-        showToast(`${saved} stories found`);
-      } else {
-        const errStr = Object.entries(errors).map(([k, v]) => `${k}: ${v}`).join('; ');
-        showToast(`No stories found${errStr ? ` — ${errStr}` : ''}`);
-      }
+      showToast('RAW: ' + JSON.stringify(data).substring(0, 300));
       await loadQueue();
       await loadStatus();
     } catch (e) {
