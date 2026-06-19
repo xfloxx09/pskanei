@@ -47,6 +47,7 @@ async def list_stories(
     stories = result.scalars().all()
     out = []
     for s in stories:
+        await db.refresh(s)  # Force fresh data
         item = StoryOut.model_validate(s)
         _enrich_story_out(s, item)
         out.append(item.model_dump())
@@ -172,6 +173,18 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     out = StoryOut.model_validate(story)
     _enrich_story_out(story, out)
     return {"success": True, "story": out}
+
+
+@router.get("/debug/{story_id}/raw")
+async def debug_raw_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    return {
+        "id": str(story.id),
+        "status": story.status,
+        "content": story.content,
+    }
 
 
 @router.get("/{story_id}")
