@@ -935,6 +935,18 @@ export default function ViralClipStudioAdmin() {
                           <Eye className="h-3 w-3" /> Preview
                         </button>
                       )}
+                      {q.status === 'generating' && (
+                        <button onClick={async () => {
+                          try {
+                            await fetchJSON(`${API}/queue/${q.id}/cancel`, { method: 'POST' });
+                            showToast('Cancelled');
+                            loadQueue();
+                            loadStatus();
+                          } catch(e) { showToast(`Error: ${e.message}`); }
+                        }} className="flex items-center gap-1 rounded-md border border-rose-700 px-2 py-1 text-xs text-rose-400 hover:bg-rose-950">
+                          <X className="h-3 w-3" /> Cancel
+                        </button>
+                      )}
                       {q.status === 'pending' && (
                         <div className="flex gap-2">
                           <button onClick={() => approveStory(q.id)} className="flex items-center gap-1 rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-emerald-950 hover:bg-emerald-400">

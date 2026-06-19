@@ -128,6 +128,22 @@ async def reject_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"success": True, "story": out}
 
 
+@router.post("/{story_id}/cancel")
+async def cancel_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    if story.status != "generating":
+        raise HTTPException(409, "Story is not generating")
+    story.status = "failed"
+    story.content = story.content or {}
+    story.content["status_msg"] = "Cancelled"
+    story.content["error"] = "User cancelled"
+    story.content["cancelled"] = True
+    await db.commit()
+    return {"success": True}
+
+
 @router.post("/{story_id}/retry")
 async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Story).where(Story.id == story_id))
