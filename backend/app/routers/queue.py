@@ -1,7 +1,8 @@
 from uuid import UUID
+import asyncio as asyncio_mod
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
@@ -46,7 +47,7 @@ async def list_stories(
     stories = result.scalars().all()
     out = []
     for s in stories:
-        await db.refresh(s)  # Force fresh data
+        await db.refresh(s)
         item = StoryOut.model_validate(s)
         _enrich_story_out(s, item)
         out.append(item.model_dump())
@@ -79,27 +80,27 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
             return False
 
     missing = []
-    # Check by role, not by hardcoded ID — works with custom providers too
-    llm_providers = [p for p in all_providers.values() if p.role and "prompt" in p.role.lower()]
-    tts_providers = [p for p in all_providers.values() if p.role and ("tts" in p.role.lower() or "voiceover" in p.role.lower())]
-    video_providers = [p for p in all_providers.values() if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())]
-
-    has_llm = any(_has_key(p.id) for p in llm_providers)
-    has_video = any(_has_key(p.id) for p in video_providers)
+    has_llm = any(
+        _has_key(p.id) for p in all_providers.values()
+        if p.role and "prompt" in p.role.lower()
+    )
+    has_video = any(
+        _has_key(p.id) for p in all_providers.values()
+        if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())
+    )
 
     if not has_llm:
-        names = [p.name for p in llm_providers]
-        if names:
-            missing.append(f"LLM (enabled but no key: {', '.join(names)})")
+        llm_names = [p.name for p in all_providers.values() if p.role and "prompt" in p.role.lower()]
+        if llm_names:
+            missing.append(f"LLM (enabled but no key: {', '.join(llm_names)})")
         else:
-            missing.append("LLM (no providers enabled. Add one via Add Provider dropdown)")
-
+            missing.append("LLM (no providers enabled)")
     if not has_video:
-        names = [p.name for p in video_providers]
-        if names:
-            missing.append(f"Video (enabled but no key: {', '.join(names)})")
+        vid_names = [p.name for p in all_providers.values() if p.role and ("video" in p.role.lower() or "avatar" in p.role.lower())]
+        if vid_names:
+            missing.append(f"Video (enabled but no key: {', '.join(vid_names)})")
         else:
-            missing.append("Video (no providers enabled. Add one via Add Provider dropdown)")
+            missing.append("Video (no providers enabled)")
 
     if missing:
         raise HTTPException(400, f"Missing API keys: {', '.join(missing)}. Set them in AI Providers tab.")
@@ -109,8 +110,7 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.refresh(story)
 
     from ..worker.tasks import _run_create_pipeline
-    import asyncio
-    asyncio.create_task(_run_create_pipeline(str(story_id)))
+    asyncio_mod.create_task(_run_create_pipeline(str(story_id)))
 
     out = StoryOut.model_validate(story)
     _enrich_story_out(story, out)
@@ -158,43 +158,17 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     if story.status not in ("failed", "generating"):
         raise HTTPException(409, f"Story is not retryable (currently {story.status})")
 
-    from ..worker.tasks import retry_failed_story
-
     story.status = "generating"
     story.content = story.content or {}
     story.content.pop("error", None)
     await db.commit()
 
     from ..worker.tasks import _run_create_pipeline
-    import asyncio
-    asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
+    asyncio_mod.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
 
     out = StoryOut.model_validate(story)
     _enrich_story_out(story, out)
     return {"success": True, "story": out}
-
-
-@router.get("/debug/{story_id}/raw")
-async def debug_raw_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
-    story = await db.get(Story, story_id)
-    if not story:
-        raise HTTPException(404, "Story not found")
-    return {
-        "id": str(story.id),
-        "status": story.status,
-        "content": story.content,
-    }
-
-
-@router.get("/{story_id}")
-async def get_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
-    story = await db.get(Story, story_id)
-    if not story:
-        raise HTTPException(404, "Story not found")
-    data = StoryDetail.model_validate(story)
-    data.content = story.content
-    _enrich_story_out(story, data)
-    return data
 
 
 @router.delete("")
@@ -202,7 +176,6 @@ async def clear_queue(
     status: str | None = Query(None, description="Only delete stories with this status"),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import delete
     stmt = delete(Story)
     if status:
         stmt = stmt.where(Story.status == status)
@@ -244,6 +217,7 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     ]
 
     all_analyses = {}
+    errors = []
 
     custom_prompt = ""
     s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
@@ -251,19 +225,24 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     if s_obj and s_obj.prompt_templates:
         custom_prompt = s_obj.prompt_templates.get("curator", "")
 
-    # Analyze EVERY story individually with up to 3 retries
     for s in batch:
-        for attempt in range(3):
+        success = False
+        last_error = ""
+        for _ in range(3):
             try:
                 curation = await curate_stories([s], deepseek_key, custom_prompt=custom_prompt)
                 analyses = curation.get("analyses", [])
                 if analyses:
                     all_analyses[s["id"]] = analyses[0]
+                    success = True
                     break
-            except Exception:
-                pass
+                else:
+                    last_error = "empty response"
+            except Exception as e:
+                last_error = str(e)[:200]
+        if not success:
+            errors.append(last_error)
 
-    # Update each story
     updated = 0
     for sid, analysis in all_analyses.items():
         try:
@@ -281,7 +260,6 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         except Exception:
             pass
 
-    # Top 3 by AI score
     sorted_all = sorted(all_analyses.values(), key=lambda a: a.get("viral_score", 0), reverse=True)
     top_ids = set()
     for a in sorted_all[:3]:
@@ -297,7 +275,32 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
                 break
 
     await db.commit()
-    return {"success": True, "analyzed": len(all_analyses), "top_pick_ids": list(top_ids), "total_stories": len(batch)}
+    return {
+        "success": True,
+        "analyzed": len(all_analyses),
+        "top_pick_ids": list(top_ids),
+        "total": len(batch),
+        "errors": errors[:10],
+    }
+
+
+@router.get("/debug/{story_id}/raw")
+async def debug_raw_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    return {"id": str(story.id), "status": story.status, "content": story.content}
+
+
+@router.get("/{story_id}")
+async def get_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
+    story = await db.get(Story, story_id)
+    if not story:
+        raise HTTPException(404, "Story not found")
+    data = StoryDetail.model_validate(story)
+    data.content = story.content
+    _enrich_story_out(story, data)
+    return data
 
 
 @router.patch("/{story_id}/prompt")
@@ -306,10 +309,7 @@ async def save_prompt(story_id: UUID, body: dict, db: AsyncSession = Depends(get
     if not story:
         raise HTTPException(404, "Story not found")
     story.content = story.content or {}
-    story.content["prompt"] = {
-        **story.content.get("prompt", {}),
-        **body,
-    }
+    story.content["prompt"] = {**story.content.get("prompt", {}), **body}
     await db.commit()
     return {"success": True}
 
@@ -321,15 +321,10 @@ async def generate_video(story_id: UUID, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Story not found")
     if not (story.content or {}).get("prompt"):
         raise HTTPException(400, "No prompt to render. Run generation first.")
-
     from ..worker.tasks import _run_create_pipeline
-    import asyncio
-
     story.status = "generating"
     story.content["status_msg"] = "Starting video render..."
     story.content.pop("error", None)
     await db.commit()
-
-    asyncio.create_task(_run_create_pipeline(str(story_id), skip_prompt=True))
-
+    asyncio_mod.create_task(_run_create_pipeline(str(story_id), skip_prompt=True))
     return {"success": True}
