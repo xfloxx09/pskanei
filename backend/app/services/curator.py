@@ -33,7 +33,9 @@ Rules:
 - Only pick top 3 as top_pick_ids
 - Be ruthless — most stories are NOT viral. Flag the truly exceptional ones
 - Focus on universal human emotions, not niche interests
-- Use the full article text to find the most compelling angle"""
+- Use the full article text to find the most compelling angle
+- CRITICAL: You MUST include an analysis for EVERY story provided. Do not skip any.
+- Return exactly one analysis per story ID sent."""
 
 
 async def curate_stories(
@@ -61,7 +63,7 @@ async def curate_stories(
         ],
         "response_format": {"type": "json_object"},
         "temperature": 0.7,
-        "max_tokens": 16000,
+        "max_tokens": 32000,
     }
 
     headers = {

@@ -220,11 +220,20 @@ async def _run_scrape_pipeline():
                 ]
 
                 if story_batch:
-                    result = await curate_stories(story_batch, deepseek_key)
-                    analyses = {a["id"]: a for a in result.get("analyses", [])}
-                    top_ids = set(result.get("top_pick_ids", []))
+                    # Batch into groups of 15
+                    all_analyses = {}
+                    all_top_ids = set()
+                    for i in range(0, len(story_batch), 15):
+                        chunk = story_batch[i:i + 15]
+                        try:
+                            result = await curate_stories(chunk, deepseek_key)
+                            for a in result.get("analyses", []):
+                                all_analyses[a["id"]] = a
+                            all_top_ids.update(result.get("top_pick_ids", []))
+                        except Exception:
+                            continue
 
-                    for sid, analysis in analyses.items():
+                    for sid, analysis in all_analyses.items():
                         try:
                             story_obj = await db.get(Story, uuid.UUID(sid))
                             if story_obj:
@@ -234,13 +243,14 @@ async def _run_scrape_pipeline():
                                     "viral_score": analysis.get("viral_score", 0),
                                     "hook_angle": analysis.get("hook_angle", ""),
                                     "reasoning": analysis.get("reasoning", ""),
-                                    "is_top_pick": sid in top_ids,
+                                    "is_top_pick": sid in all_top_ids,
                                 }
                                 curated += 1
                         except (ValueError, TypeError):
                             pass
 
-                    await db.commit()
+                    if curated:
+                        await db.commit()
         except Exception:
             pass
 

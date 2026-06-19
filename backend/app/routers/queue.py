@@ -227,20 +227,29 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         for s in stories
     ]
 
-    try:
-        # Load custom curator prompt if set
-        custom_prompt = ""
-        s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
-        s_obj = s_result.scalar_one_or_none()
-        if s_obj and s_obj.prompt_templates:
-            custom_prompt = s_obj.prompt_templates.get("curator", "")
+    # Batch into groups of 15 to avoid DeepSeek truncation
+    all_analyses = {}
+    all_top_ids = set()
 
-        curation = await curate_stories(batch, deepseek_key, custom_prompt=custom_prompt)
-    except Exception as e:
-        raise HTTPException(502, f"DeepSeek API error: {str(e)}")
+    # Load custom curator prompt
+    custom_prompt = ""
+    s_result = await db.execute(select(ScrapeSettings).where(ScrapeSettings.id == 1))
+    s_obj = s_result.scalar_one_or_none()
+    if s_obj and s_obj.prompt_templates:
+        custom_prompt = s_obj.prompt_templates.get("curator", "")
 
-    analyses = {a["id"]: a for a in curation.get("analyses", [])}
-    top_ids = set(curation.get("top_pick_ids", []))
+    for i in range(0, len(batch), 15):
+        chunk = batch[i:i + 15]
+        try:
+            curation = await curate_stories(chunk, deepseek_key, custom_prompt=custom_prompt)
+            for a in curation.get("analyses", []):
+                all_analyses[a["id"]] = a
+            all_top_ids.update(curation.get("top_pick_ids", []))
+        except Exception as e:
+            raise HTTPException(502, f"DeepSeek API error on batch {i//15 + 1}: {str(e)}")
+
+    analyses = all_analyses
+    top_ids = all_top_ids
     updated = 0
 
     for sid, analysis in analyses.items():
