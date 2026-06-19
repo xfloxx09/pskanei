@@ -255,16 +255,15 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
     )
 
     async with async_session() as db:
-        try:
-            story = await db.get(Story, _UUID(story_id))
-            if not story:
-                return {"status": "error", "reason": "story not found"}
+        story = await db.get(Story, _UUID(story_id))
+        if not story:
+            return {"status": "error", "reason": "story not found"}
 
-            if story.status not in ("pending", "generating", "failed"):
-                return {"status": "skipped", "reason": f"status is {story.status}"}
+        if story.status not in ("pending", "generating", "failed"):
+            return {"status": "skipped", "reason": f"status is {story.status}"}
 
-            if not skip_budget_check and not await check_budget(db):
-                return {"status": "skipped", "reason": "daily budget exceeded"}
+        if not skip_budget_check and not await check_budget(db):
+            return {"status": "skipped", "reason": "daily budget exceeded"}
 
         story.status = "generating"
         story.content = story.content or {}
@@ -315,7 +314,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
                 story.content["status_msg"] = "No LLM"
                 story.status = "failed"
                 await db.commit()
-                raise RuntimeError(story.content["error"])
+                return {"status": "error", "reason": story.content["error"]}
 
         story.content["prompt"] = prompt
         await db.commit()
@@ -357,7 +356,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
             story.content["status_msg"] = "TTS failed"
             story.status = "failed"
             await db.commit()
-            raise RuntimeError(story.content["error"])
+            return {"status": "error", "reason": story.content["error"]}
 
         story.content["tts_url"] = tts_url
         await db.commit()
@@ -393,7 +392,7 @@ async def _run_create_pipeline(story_id: str, skip_budget_check: bool = False, s
             story.content["status_msg"] = "Video failed"
             story.status = "failed"
             await db.commit()
-            raise RuntimeError(story.content["error"])
+            return {"status": "error", "reason": story.content["error"]}
 
         story.content["video_url"] = video_url
         await db.commit()
