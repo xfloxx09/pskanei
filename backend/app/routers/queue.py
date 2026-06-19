@@ -13,15 +13,14 @@ from ..schemas.story import StoryOut, StoryDetail
 def _enrich_story_out(story: Story, out: StoryOut):
     c = story.content or {}
     if isinstance(c, dict):
-        if "ai_curation" in c and c["ai_curation"]:
-            out.ai_curation = c["ai_curation"]
-        elif out.status == "pending":
-            out.status_msg = "Not analyzed"
+        ai = c.get("ai_curation")
+        if ai and isinstance(ai, dict):
+            out.ai_curation = ai
         if "status_msg" in c and c["status_msg"]:
             out.status_msg = c["status_msg"]
         elif "error" in c and c["error"]:
             out.status_msg = c["error"][:80]
-        elif story.status == "failed":
+        elif out.status == "failed":
             out.status_msg = "Unknown error"
 
 
@@ -297,7 +296,8 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
             pass
 
     await db.commit()
-    return {"success": True, "analyzed": updated, "top_pick_ids": list(top_ids)}
+    sample_ids = list(all_analyses.keys())[:5]
+    return {"success": True, "analyzed": updated, "top_pick_ids": list(top_ids), "sample_ids": sample_ids}
 
 
 @router.patch("/{story_id}/prompt")
