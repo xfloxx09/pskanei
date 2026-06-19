@@ -13,8 +13,10 @@ from ..schemas.story import StoryOut, StoryDetail
 def _enrich_story_out(story: Story, out: StoryOut):
     c = story.content or {}
     if isinstance(c, dict):
-        if "ai_curation" in c:
+        if "ai_curation" in c and c["ai_curation"]:
             out.ai_curation = c["ai_curation"]
+        elif out.status == "pending":
+            out.status_msg = "Not analyzed"
         if "status_msg" in c and c["status_msg"]:
             out.status_msg = c["status_msg"]
         elif "error" in c and c["error"]:
@@ -238,8 +240,8 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
     if s_obj and s_obj.prompt_templates:
         custom_prompt = s_obj.prompt_templates.get("curator", "")
 
-    for i in range(0, len(batch), 15):
-        chunk = batch[i:i + 15]
+    for i in range(0, len(batch), 10):
+        chunk = batch[i:i + 10]
         try:
             curation = await curate_stories(chunk, deepseek_key, custom_prompt=custom_prompt)
             for a in curation.get("analyses", []):

@@ -223,8 +223,8 @@ async def _run_scrape_pipeline():
                     # Batch into groups of 15
                     all_analyses = {}
                     all_top_ids = set()
-                    for i in range(0, len(story_batch), 15):
-                        chunk = story_batch[i:i + 15]
+                    for i in range(0, len(story_batch), 10):
+                        chunk = story_batch[i:i + 10]
                         try:
                             result = await curate_stories(chunk, deepseek_key)
                             for a in result.get("analyses", []):
