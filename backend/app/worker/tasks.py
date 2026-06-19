@@ -93,7 +93,10 @@ async def _run_scrape_pipeline():
 
         SCRAPER_MAP = {
             "gdelt": GDELTScraper(),
-            "reddit": RedditScraper(),
+            "reddit": RedditScraper(
+                client_id=decrypted_keys.get("reddit_client_id", ""),
+                client_secret=decrypted_keys.get("reddit_client_secret", ""),
+            ),
             "newsapi": NewsAPIScraper(api_key=decrypted_keys.get("newsapi", "")),
             "gtrends": GoogleTrendsScraper(),
             "ytrending": YouTubeTrendingScraper(api_key=decrypted_keys.get("youtube", "")),

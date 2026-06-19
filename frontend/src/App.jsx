@@ -533,8 +533,32 @@ export default function ViralClipStudioAdmin() {
 
               <Card className="p-4">
                 <div className="mb-3 text-sm font-medium text-zinc-200">API Keys</div>
-                <p className="mb-3 text-xs text-zinc-500">Keys are encrypted at rest. Only needed for NewsAPI and YouTube sources.</p>
+                <p className="mb-3 text-xs text-zinc-500">Keys are encrypted at rest. Reddit requires a script app at reddit.com/prefs/apps.</p>
                 <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <KeyRound className="h-3 w-3" /> Reddit Client ID
+                    </label>
+                    <input
+                      type="password"
+                      value={scraperKeys.reddit_client_id || ''}
+                      onChange={(e) => setScraperKeys(prev => ({ ...prev, reddit_client_id: e.target.value }))}
+                      placeholder="From Reddit app settings"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center gap-1 text-xs text-zinc-500">
+                      <KeyRound className="h-3 w-3" /> Reddit Client Secret
+                    </label>
+                    <input
+                      type="password"
+                      value={scraperKeys.reddit_client_secret || ''}
+                      onChange={(e) => setScraperKeys(prev => ({ ...prev, reddit_client_secret: e.target.value }))}
+                      placeholder="From Reddit app settings"
+                      className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1.5 font-mono text-sm text-zinc-200"
+                    />
+                  </div>
                   <div>
                     <label className="mb-1 flex items-center gap-1 text-xs text-zinc-500">
                       <KeyRound className="h-3 w-3" /> NewsAPI key
