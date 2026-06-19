@@ -206,7 +206,11 @@ async def curate_queue(db: AsyncSession = Depends(get_db)):
         for s in stories
     ]
 
-    curation = await curate_stories(batch, deepseek_key)
+    try:
+        curation = await curate_stories(batch, deepseek_key)
+    except Exception as e:
+        raise HTTPException(502, f"DeepSeek API error: {str(e)}")
+
     analyses = {a["id"]: a for a in curation.get("analyses", [])}
     top_ids = set(curation.get("top_pick_ids", []))
     updated = 0
