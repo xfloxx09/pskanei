@@ -324,13 +324,13 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         for k, v in d.items():
             story.content[k] = v
 
-    def _commit(db, story):
+    async def _commit(db, story):
         for k, v in (story.content or {}).items():
-            db.execute(
+            await db.execute(
                 _sql_text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true) WHERE id = :id::uuid"),
                 {"path": "{" + k + "}", "val": _j.dumps(v), "id": str(story.id)},
             )
-        db.execute(
+        await db.execute(
             _sql_text("UPDATE stories SET status = :st WHERE id = :id::uuid"),
             {"st": story.status, "id": str(story.id)},
         )

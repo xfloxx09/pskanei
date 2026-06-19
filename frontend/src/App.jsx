@@ -174,6 +174,8 @@ export default function ViralClipStudioAdmin() {
   const [prompts, setPrompts] = useState({ curator: '', generator: '' });
   const [showPrompts, setShowPrompts] = useState(false);
   const [analysisLog, setAnalysisLog] = useState(null);
+  const [generatingId, setGeneratingId] = useState(null);
+  const [genSteps, setGenSteps] = useState([]);
 
   const showToast = useCallback((msg, duration = 8000) => {
     setToast(msg);
@@ -265,14 +267,21 @@ export default function ViralClipStudioAdmin() {
 
   // Auto-refresh queue when stories are generating
   useEffect(() => {
-    const generating = queue.some(q => q.status === 'generating');
-    if (!generating) return;
+    const generating = queue.find(q => q.status === 'generating');
+    if (!generating) {
+      setGeneratingId(null);
+      return;
+    }
+    setGeneratingId(generating.id);
     const interval = setInterval(() => {
       loadQueue();
       loadStatus();
-    }, 2000);
+    }, 1500);
     return () => clearInterval(interval);
   }, [queue, loadQueue, loadStatus]);
+
+  // Track generating story for popup
+  const genStory = queue.find(q => q.id === generatingId);
 
   function toggleSource(id) {
     setSources((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
@@ -1090,6 +1099,34 @@ export default function ViralClipStudioAdmin() {
           )}
         </div>
       </div>
+
+      {/* Generating Progress Popup */}
+      {generatingId && genStory && (
+        <div className="fixed bottom-6 right-6 z-50 w-80 rounded-xl border border-sky-800 bg-zinc-900 shadow-2xl overflow-hidden">
+          <div className="bg-sky-950 px-4 py-3 flex items-center justify-between">
+            <span className="text-sm font-medium text-sky-200 flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+              Generating
+            </span>
+            <button onClick={() => setGeneratingId(null)} className="text-zinc-500 hover:text-zinc-200"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="px-4 py-3 space-y-2">
+            <div className="text-xs text-zinc-300 truncate">{genStory.title}</div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={genStory.status} statusMsg={genStory.status_msg || genStory.status} />
+            </div>
+            <div className="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
+              <div className="bg-sky-500 h-full rounded-full animate-pulse transition-all" style={{
+                width: genStory.status_msg?.includes('prompt') ? '25%' :
+                       genStory.status_msg?.includes('voiceover') || genStory.status_msg?.includes('TTS') ? '50%' :
+                       genStory.status_msg?.includes('Rendering') || genStory.status_msg?.includes('video') ? '75%' :
+                       genStory.status_msg === 'Ready' ? '100%' : '10%'
+              }} />
+            </div>
+            <div className="text-xs text-zinc-500 text-center">{genStory.status_msg || 'Working...'}</div>
+          </div>
+        </div>
+      )}
 
       {/* Preview Modal */}
       {previewStory && (
