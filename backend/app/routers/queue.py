@@ -40,17 +40,40 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     if story.status != "pending":
         raise HTTPException(409, f"Story is not pending (currently {story.status})")
 
+    from ..models.provider import Provider
+    from ..services.crypto import decrypt
+    providers_result = await db.execute(
+        select(Provider).where(Provider.enabled.is_(True))
+    )
+    all_providers = {p.id: p for p in providers_result.scalars().all()}
+
+    def _has_key(pid: str) -> bool:
+        p = all_providers.get(pid)
+        if not p or not p.api_key_encrypted:
+            return False
+        try:
+            return bool(decrypt(p.api_key_encrypted))
+        except Exception:
+            return False
+
+    missing = []
+    if not _has_key("p1"):
+        missing.append("DeepSeek (prompt generation)")
+    if not _has_key("p3"):
+        missing.append("ElevenLabs (voiceover)")
+    if not _has_key("p2"):
+        missing.append("Creatomate (video assembly)")
+
+    if missing:
+        raise HTTPException(400, f"Missing API keys: {', '.join(missing)}. Set them in AI Providers tab.")
+
     story.status = "generating"
     await db.commit()
     await db.refresh(story)
 
-    try:
-        from ..worker.tasks import create_pipeline
-        create_pipeline.delay(str(story_id))
-    except Exception:
-        from ..worker.tasks import _run_create_pipeline
-        import asyncio
-        asyncio.create_task(_run_create_pipeline(str(story_id)))
+    from ..worker.tasks import _run_create_pipeline
+    import asyncio
+    asyncio.create_task(_run_create_pipeline(str(story_id)))
 
     return {"success": True, "story": StoryOut.model_validate(story)}
 
@@ -85,11 +108,8 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     story.content.pop("error", None)
     await db.commit()
 
-    try:
-        retry_failed_story.delay(str(story_id))
-    except Exception:
-        from ..worker.tasks import _run_create_pipeline
-        import asyncio
-        asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
+    from ..worker.tasks import _run_create_pipeline
+    import asyncio
+    asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
 
     return {"success": True, "story": StoryOut.model_validate(story)}
