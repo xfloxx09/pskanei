@@ -6,7 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
 from ..models.story import Story
-from ..schemas.story import StoryOut
+from ..schemas.story import StoryOut, StoryDetail
+
+
+def _enrich_story_out(story: Story, out: StoryOut):
+    c = story.content or {}
+    if isinstance(c, dict):
+        if "ai_curation" in c:
+            out.ai_curation = c["ai_curation"]
+        if "status_msg" in c:
+            out.status_msg = c["status_msg"]
+
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])
 
@@ -28,7 +38,10 @@ async def list_stories(
 
     result = await db.execute(stmt)
     stories = result.scalars().all()
-    return [StoryOut.model_validate(s) for s in stories]
+    out = [StoryOut.model_validate(s) for s in stories]
+    for i, s in enumerate(stories):
+        _enrich_story_out(s, out[i])
+    return out
 
 
 @router.post("/{story_id}/approve")
@@ -90,7 +103,9 @@ async def approve_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     import asyncio
     asyncio.create_task(_run_create_pipeline(str(story_id)))
 
-    return {"success": True, "story": StoryOut.model_validate(story)}
+    out = StoryOut.model_validate(story)
+    _enrich_story_out(story, out)
+    return {"success": True, "story": out}
 
 
 @router.post("/{story_id}/reject")
@@ -104,7 +119,9 @@ async def reject_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     story.status = "rejected"
     await db.commit()
     await db.refresh(story)
-    return {"success": True, "story": StoryOut.model_validate(story)}
+    out = StoryOut.model_validate(story)
+    _enrich_story_out(story, out)
+    return {"success": True, "story": out}
 
 
 @router.post("/{story_id}/retry")
@@ -127,16 +144,20 @@ async def retry_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
     import asyncio
     asyncio.create_task(_run_create_pipeline(str(story_id), skip_budget_check=True))
 
-    return {"success": True, "story": StoryOut.model_validate(story)}
+    out = StoryOut.model_validate(story)
+    _enrich_story_out(story, out)
+    return {"success": True, "story": out}
 
 
 @router.get("/{story_id}")
 async def get_story(story_id: UUID, db: AsyncSession = Depends(get_db)):
-    from ..schemas.story import StoryDetail
     story = await db.get(Story, story_id)
     if not story:
         raise HTTPException(404, "Story not found")
-    return StoryDetail.model_validate(story)
+    data = StoryDetail.model_validate(story)
+    data.content = story.content
+    _enrich_story_out(story, data)
+    return data
 
 
 @router.delete("")
