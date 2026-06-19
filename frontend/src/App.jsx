@@ -130,6 +130,7 @@ export default function ViralClipStudioAdmin() {
   const [statusCounts, setStatusCounts] = useState({ pending: 0, generating: 0, ready: 0, budget_used_today: 0 });
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(false);
+  const [scraping, setScraping] = useState(false);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -333,6 +334,28 @@ export default function ViralClipStudioAdmin() {
     loadStatus();
   }
 
+  async function triggerScrape() {
+    setScraping(true);
+    try {
+      const data = await fetchJSON(`${API}/scrape/trigger`, { method: 'POST' });
+      const saved = data?.detail?.stories_saved ?? 0;
+      const status = data?.detail?.status ?? 'done';
+      if (status === 'skipped') {
+        showToast(data?.detail?.reason || 'Scrape skipped');
+      } else if (saved > 0) {
+        showToast(`${saved} new stories found and scored`);
+      } else {
+        showToast('Scrape completed — no new stories found');
+      }
+      await loadQueue();
+      await loadStatus();
+    } catch (e) {
+      showToast(`Scrape failed: ${e.message}`);
+    } finally {
+      setScraping(false);
+    }
+  }
+
   const pendingCount = statusCounts.pending ?? queue.filter(q => q.status === 'pending').length;
   const generatingCount = statusCounts.generating ?? queue.filter(q => q.status === 'generating').length;
   const readyCount = statusCounts.ready ?? queue.filter(q => q.status === 'ready').length;
@@ -500,8 +523,12 @@ export default function ViralClipStudioAdmin() {
                 <button onClick={saveScrapeSettings} disabled={loading} className="rounded-md bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 hover:bg-amber-400">
                   {loading ? 'Saving...' : 'Save scrape settings'}
                 </button>
-                <button onClick={() => fetchJSON(`${API}/scrape/trigger`, { method: 'POST' }).then(() => { showToast('Scrape triggered'); setTimeout(refreshQueue, 3000); }).catch(e => showToast(`Error: ${e.message}`))} className="rounded-md border border-amber-500 px-4 py-2 text-sm text-amber-400 hover:bg-amber-950">
-                  <RefreshCw className="inline h-3.5 w-3.5 mr-1" /> Run now
+                <button onClick={triggerScrape} disabled={scraping} className="rounded-md border border-amber-500 px-4 py-2 text-sm text-amber-400 hover:bg-amber-950 disabled:opacity-50">
+                  {scraping ? (
+                    <><RefreshCw className="inline h-3.5 w-3.5 mr-1 animate-spin" /> Scraping...</>
+                  ) : (
+                    <><RefreshCw className="inline h-3.5 w-3.5 mr-1" /> Run now</>
+                  )}
                 </button>
               </div>
             </div>
