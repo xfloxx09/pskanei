@@ -47,16 +47,21 @@ async def list_stories(
     stories = result.scalars().all()
     out = []
     for s in stories:
+        db.expire(s)  # Clear cached state
         await db.refresh(s)
         item = StoryOut.model_validate(s)
         _enrich_story_out(s, item)
         d = item.model_dump()
-        # Force ai_curation into response if enrichment set it
+        # Force ai_curation into response
         if item.ai_curation:
             d["ai_curation"] = item.ai_curation
+        else:
+            # Fallback: read content directly from refreshed object
+            raw = s.content or {}
+            ai = raw.get("ai_curation")
+            if ai and isinstance(ai, dict):
+                d["ai_curation"] = ai
         out.append(d)
-    # Debug: count how many have ai_curation
-    tagged = sum(1 for o in out if o.get("ai_curation"))
     return out
 
 
