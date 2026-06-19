@@ -28,7 +28,7 @@ def _enrich_story_out(story: Story, out: StoryOut):
 router = APIRouter(prefix="/api/queue", tags=["queue"])
 
 
-@router.get("", response_model=list[StoryOut])
+@router.get("")
 async def list_stories(
     window: str | None = Query(None, description="Time window filter"),
     status: str | None = Query(None, description="Status filter"),
@@ -45,9 +45,11 @@ async def list_stories(
 
     result = await db.execute(stmt)
     stories = result.scalars().all()
-    out = [StoryOut.model_validate(s) for s in stories]
-    for i, s in enumerate(stories):
-        _enrich_story_out(s, out[i])
+    out = []
+    for s in stories:
+        item = StoryOut.model_validate(s)
+        _enrich_story_out(s, item)
+        out.append(item.model_dump())
     return out
 
 
