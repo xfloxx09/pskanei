@@ -14,8 +14,12 @@ def _enrich_story_out(story: Story, out: StoryOut):
     if isinstance(c, dict):
         if "ai_curation" in c:
             out.ai_curation = c["ai_curation"]
-        if "status_msg" in c:
+        if "status_msg" in c and c["status_msg"]:
             out.status_msg = c["status_msg"]
+        elif "error" in c and c["error"]:
+            out.status_msg = c["error"][:80]
+        elif story.status == "failed":
+            out.status_msg = "Unknown error"
 
 
 router = APIRouter(prefix="/api/queue", tags=["queue"])

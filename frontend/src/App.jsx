@@ -1051,12 +1051,17 @@ export default function ViralClipStudioAdmin() {
                 </div>
               )}
 
-              {previewStory.content?.error && (
+              {previewStory.content?.error ? (
                 <div className="p-3 rounded-lg bg-rose-950 border border-rose-800">
                   <div className="text-xs text-rose-400 mb-1">Error</div>
-                  <div className="text-rose-300 text-xs">{previewStory.content.error}</div>
+                  <div className="text-rose-300 text-xs whitespace-pre-wrap">{previewStory.content.error}</div>
                 </div>
-              )}
+              ) : previewStory.status === 'failed' ? (
+                <div className="p-3 rounded-lg bg-rose-950 border border-rose-800">
+                  <div className="text-xs text-rose-400 mb-1">Story failed</div>
+                  <div className="text-rose-300 text-xs break-all font-mono">Content: {JSON.stringify(previewStory.content)}</div>
+                </div>
+              ) : null}
 
               {previewStory.content?.prompt && (
                 <div>
