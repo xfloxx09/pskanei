@@ -48,7 +48,7 @@ async def _mark_failed(story_id: str, error: str):
             story.content = story.content or {}
             story.content["error"] = error
             story.content["status_msg"] = error[:80]
-            await _commit(db, story)
+            await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ async def _run_scrape_pipeline():
             db.add(new_story)
             saved += 1
 
-        await _commit(db, story)
+        await db.commit()
 
         # --- Fetch article content for each story ---
         fetched = 0
@@ -182,7 +182,7 @@ async def _run_scrape_pipeline():
                         fetched += 1
 
             if fetched:
-                await _commit(db, story)
+                await db.commit()
         except Exception:
             pass
 
@@ -262,7 +262,7 @@ async def _run_scrape_pipeline():
                             pass
 
                     if curated:
-                        await _commit(db, story)
+                        await db.commit()
         except Exception:
             pass
 
@@ -380,7 +380,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         else:
             prompt = None
             story.content["status_msg"] = "Generating AI prompt..."
-            await _commit(db, story)
+            await db.commit()
             llm_classes = [
                 ("Prompt generation", DeepSeekProvider),
                 ("Prompt generation", OpenAIProvider),
@@ -406,13 +406,13 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not prompt:
             err_msg = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
             story.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return
             _set(story, {"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
-        await _commit(db, story)
+        await db.commit()
         _set(story, {"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
@@ -451,7 +451,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not tts_url:
             err_msg = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
             story.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return
             _set(story, {"error": err_msg, "status_msg": "TTS failed"})
             return {"status": "error", "reason": err_msg}
@@ -488,7 +488,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not video_url:
             err_msg = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
             story.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return
             _set(story, {"error": err_msg, "status_msg": "Video failed"})
             return {"status": "error", "reason": err_msg}
@@ -498,7 +498,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         # --- Step 4: Finalize ---
         story.status = "ready"
         _set(story, status_msg="Ready")
-        await _commit(db, story)
+        await db.commit()
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
         _set(story, {"status_msg": "Ready"})
 
@@ -537,7 +537,7 @@ async def _mark_clip_failed(clip_id: str, error: str):
         clip = await db.get(PublishedClip, _UUID(clip_id))
         if clip:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
 
 
 async def _run_publish_clip(clip_id: str):
@@ -576,31 +576,31 @@ async def _run_publish_clip(clip_id: str):
         story = await db.get(Story, clip.story_id)
         if not story:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return {"status": "error", "reason": "story not found"}
 
         platform = await db.get(PlatformAccount, clip.platform)
         if not platform or not platform.connected or not platform.enabled:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return {"status": "error", "reason": "platform not connected"}
 
         access_token = decrypt(platform.access_token_encrypted) if platform.access_token_encrypted else ""
         if not access_token:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return {"status": "error", "reason": "no access token"}
 
         publisher = PUBLISHER_MAP.get(clip.platform)
         if not publisher:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return {"status": "error", "reason": f"unknown platform {clip.platform}"}
 
         video_url = (story.content or {}).get("video_url", "")
         if not video_url:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             return {"status": "error", "reason": "no video URL in story content"}
 
         r2_url = await upload_to_r2(video_url)
@@ -625,11 +625,11 @@ async def _run_publish_clip(clip_id: str):
             clip.video_url = result.get("url", "")
             clip.status = "published"
             clip.published_at = datetime.now(timezone.utc)
-            await _commit(db, story)
+            await db.commit()
             return {"status": "ok", "clip_id": clip_id, "post_id": result.get("post_id")}
         except Exception as exc:
             clip.status = "failed"
-            await _commit(db, story)
+            await db.commit()
             raise
 
 
@@ -656,7 +656,7 @@ async def _run_check_scheduled():
 
         for clip in due_clips:
             clip.status = "publishing"
-            await _commit(db, story)
+            await db.commit()
             publish_clip.delay(str(clip.id))
 
         return {"status": "ok", "due_clips": len(due_clips)}
