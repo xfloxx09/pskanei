@@ -378,11 +378,17 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     key = _get_key(pid)
                     if not key:
                         continue
+                    story.content["status_msg"] = f"Calling {p.name}..."
+                    flag_modified(story, "content")
+                    await db.commit()
                     try:
                         llm = cls(api_key=key, system_prompt=gen_prompt) if cls == DeepSeekProvider else cls(api_key=key)
                         prompt = await llm.generate_prompt(story.title, (story.content or {}).get("article_text", story.summary or ""))
                         break
                     except Exception as exc:
+                        story.content["status_msg"] = f"{p.name} failed: {str(exc)[:60]}"
+                        flag_modified(story, "content")
+                        await db.commit()
                         llm_errors_list.append(f"{cls.__name__}: {exc}")
                         continue
                 if prompt:
@@ -422,17 +428,26 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                 key = _get_key(pid)
                 if not key:
                     continue
+                story.content["status_msg"] = f"Calling {p.name}..."
+                flag_modified(story, "content")
+                await db.commit()
                 try:
                     tts = cls(api_key=key)
                     tts_url = await tts.generate_speech(voiceover)
                     break
                 except Exception as exc:
+                    story.content["status_msg"] = f"{p.name} failed: {str(exc)[:60]}"
+                    flag_modified(story, "content")
+                    await db.commit()
                     tts_errors.append(f"{cls.__name__}: {exc}")
                     continue
             if tts_url:
                 break
 
         if not tts_url:
+            story.content["status_msg"] = "Trying Edge TTS (free)..."
+            flag_modified(story, "content")
+            await db.commit()
             try:
                 edge = EdgeTTSProvider()
                 tts_url = await asyncio.wait_for(edge.generate_speech(voiceover), timeout=45)
@@ -473,15 +488,21 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             for pid, p in all_providers.items():
                 if not p.enabled or p.role != role:
                     continue
-                key = _get_key(pid)
-                if not key:
-                    continue
-                try:
-                    video = cls(api_key=key)
-                    video_url = await video.render_video(prompt, tts_url)
-                    break
-                except Exception as exc:
-                    video_errors.append(f"{cls.__name__}: {exc}")
+                    key = _get_key(pid)
+                    if not key:
+                        continue
+                    story.content["status_msg"] = f"Calling {p.name}..."
+                    flag_modified(story, "content")
+                    await db.commit()
+                    try:
+                        video = cls(api_key=key)
+                        video_url = await video.render_video(prompt, tts_url)
+                        break
+                    except Exception as exc:
+                        story.content["status_msg"] = f"{p.name} failed: {str(exc)[:60]}"
+                        flag_modified(story, "content")
+                        await db.commit()
+                        video_errors.append(f"{cls.__name__}: {exc}")
                     continue
             if video_url:
                 break
