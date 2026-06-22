@@ -5,26 +5,7 @@ from .celery_app import app
 
 
 async def _sql_write(db, story_id, content_updates: dict = None, status: str = None):
-    """Write content/status to DB using an independent connection — bypasses any session issues."""
-    from sqlalchemy.ext.asyncio import create_async_engine
-    from sqlalchemy import text as _t
-    from ..config import settings as _cfg
-    eng = create_async_engine(_cfg.async_database_url)
-    try:
-        async with eng.begin() as conn:
-            if content_updates:
-                for k, v in content_updates.items():
-                    await conn.execute(
-                        _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
-                        {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
-                    )
-            if status:
-                await conn.execute(
-                    _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
-                    {"st": status, "id": story_id},
-                )
-    finally:
-        await eng.dispose()
+    pass  # Don't use this anymore — use ORM directly below
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=120)
@@ -323,6 +304,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
     os.environ.setdefault("ENVIRONMENT", "production")
 
     from sqlalchemy import select
+    from sqlalchemy.orm.attributes import flag_modified
     from uuid import UUID as _UUID
 
     from ..database import async_session
@@ -349,7 +331,10 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         story.content = story.content or {}
         story.content.pop("error", None)
-        await _sql_write(db, story_id, status="generating", content_updates={"status_msg": "Fetching providers..."})
+        story.status = "generating"
+        story.content["status_msg"] = "Fetching providers..."
+        flag_modified(story, "content")
+        await db.commit()
 
         providers_result = await db.execute(
             select(Provider).where(Provider.enabled.is_(True))
@@ -378,7 +363,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             prompt = story.content.get("prompt")
         else:
             prompt = None
-            await _sql_write(db, story_id, content_updates={"status_msg": "Generating AI prompt..."})
+            story.content["status_msg"] = "Generating AI prompt..."
+            flag_modified(story, "content")
+            await db.commit()
             llm_classes = [
                 ("Prompt generation", DeepSeekProvider),
                 ("Prompt generation", OpenAIProvider),
@@ -406,13 +393,21 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "LLM failed"})
+            story.status = "failed"
+            story.content["error"] = err_msg
+            story.content["status_msg"] = "LLM failed"
+            flag_modified(story, "content")
+            await db.commit()
             return {"status": "error", "reason": err_msg}
 
-        await _sql_write(db, story_id, content_updates={"prompt": prompt})
+        story.content["prompt"] = prompt
+        flag_modified(story, "content")
+        await db.commit()
 
         # --- Step 2: Generate TTS ---
-        await _sql_write(db, story_id, content_updates={"status_msg": "Generating voiceover..."})
+        story.content["status_msg"] = "Generating voiceover..."
+        flag_modified(story, "content")
+        await db.commit()
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -449,13 +444,21 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "TTS failed"})
+            story.status = "failed"
+            story.content["error"] = err_msg
+            story.content["status_msg"] = "TTS failed"
+            flag_modified(story, "content")
+            await db.commit()
             return {"status": "error", "reason": err_msg}
 
-        await _sql_write(db, story_id, content_updates={"tts_url": tts_url})
+        story.content["tts_url"] = tts_url
+        flag_modified(story, "content")
+        await db.commit()
 
         # --- Step 3: Render video ---
-        await _sql_write(db, story_id, content_updates={"status_msg": "Rendering video..."})
+        story.content["status_msg"] = "Rendering video..."
+        flag_modified(story, "content")
+        await db.commit()
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -486,18 +489,22 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "Video failed"})
+            story.status = "failed"
+            story.content["error"] = err_msg
+            story.content["status_msg"] = "Video failed"
+            flag_modified(story, "content")
+            await db.commit()
             return {"status": "error", "reason": err_msg}
 
-        await _sql_write(db, story_id, content_updates={"video_url": video_url})
+        story.content["video_url"] = video_url
+        flag_modified(story, "content")
+        await db.commit()
 
         # --- Step 4: Finalize ---
         story.status = "ready"
-        await _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
+        story.content["status_msg"] = "Ready"
+        flag_modified(story, "content")
         await db.commit()
-        return {"status": "ok", "story_id": story_id, "video_url": video_url}
-        await _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
-
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
 
