@@ -371,8 +371,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             prompt = story.content.get("prompt")
         else:
             prompt = None
-            story.content["status_msg"] = "Generating AI prompt..."
-            await db.commit()
+            await _sql_write(db, story_id, content_updates={"status_msg": "Generating AI prompt..."})
             llm_classes = [
                 ("Prompt generation", DeepSeekProvider),
                 ("Prompt generation", OpenAIProvider),
@@ -403,8 +402,6 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
-        story.content["prompt"] = prompt
-        await db.commit()
         await _sql_write(db, story_id, content_updates={"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
