@@ -1,6 +1,23 @@
 import asyncio
+import json as _json_module
 
 from .celery_app import app
+
+
+async def _sql_write(db, story_id, content_updates: dict = None, status: str = None):
+    """Write content/status to DB using raw SQL — same pattern that works in curate endpoint."""
+    from sqlalchemy import text as _t
+    if content_updates:
+        for k, v in content_updates.items():
+            await db.execute(
+                _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid"),
+                {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
+            )
+    if status:
+        await db.execute(
+            _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid"),
+            {"st": status, "id": story_id},
+        )
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=120)
@@ -298,8 +315,7 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
     os.environ.setdefault("ENVIRONMENT", "production")
 
-    from sqlalchemy import select, text as _sql_text
-    import json as _j
+    from sqlalchemy import select
     from uuid import UUID as _UUID
 
     from ..database import async_session
@@ -308,32 +324,10 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
     from ..services.crypto import decrypt
     from ..services.budget import check_budget
     from ..services.providers import (
-        DeepSeekProvider,
-        OpenAIProvider,
-        ElevenLabsProvider,
-        OpenAITTSProvider,
-        EdgeTTSProvider,
-        CreatomateProvider,
-        ShotstackProvider,
-        JSON2VideoProvider,
-        SynthesiaProvider,
+        DeepSeekProvider, OpenAIProvider,
+        ElevenLabsProvider, OpenAITTSProvider, EdgeTTSProvider,
+        CreatomateProvider, ShotstackProvider, JSON2VideoProvider, SynthesiaProvider,
     )
-
-    def _set(story, updates: dict = None, **kwargs):
-        d = updates or kwargs
-        for k, v in d.items():
-            story.content[k] = v
-
-    async def _commit(db, story):
-        for k, v in (story.content or {}).items():
-            await db.execute(
-                _sql_text("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true) WHERE id = :id::uuid"),
-                {"path": "{" + k + "}", "val": _j.dumps(v), "id": str(story.id)},
-            )
-        await db.execute(
-            _sql_text("UPDATE stories SET status = :st WHERE id = :id::uuid"),
-            {"st": story.status, "id": str(story.id)},
-        )
 
     async with async_session() as db:
         story = await db.get(Story, _UUID(story_id))
@@ -346,11 +340,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not skip_budget_check and not await check_budget(db):
             return {"status": "skipped", "reason": "daily budget exceeded"}
 
-        story.status = "generating"
         story.content = story.content or {}
         story.content.pop("error", None)
-        _set(story, status_msg="Fetching providers...")
-        await _commit(db, story)
+        await _sql_write(db, story_id, status="generating", content_updates={"status_msg": "Fetching providers..."})
 
         providers_result = await db.execute(
             select(Provider).where(Provider.enabled.is_(True))
