@@ -400,15 +400,15 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "LLM failed"})
+            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
         await db.commit()
-        _sql_write(db, story_id, content_updates={"prompt": prompt})
+        await _sql_write(db, story_id, content_updates={"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
-        _sql_write(db, story_id, content_updates={"status_msg": "Generating voiceover..."})
+        await _sql_write(db, story_id, content_updates={"status_msg": "Generating voiceover..."})
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -445,13 +445,13 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "TTS failed"})
+            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "TTS failed"})
             return {"status": "error", "reason": err_msg}
 
-        _sql_write(db, story_id, content_updates={"tts_url": tts_url})
+        await _sql_write(db, story_id, content_updates={"tts_url": tts_url})
 
         # --- Step 3: Render video ---
-        _sql_write(db, story_id, content_updates={"status_msg": "Rendering video..."})
+        await _sql_write(db, story_id, content_updates={"status_msg": "Rendering video..."})
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -482,17 +482,17 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "Video failed"})
+            await _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "Video failed"})
             return {"status": "error", "reason": err_msg}
 
-        _sql_write(db, story_id, content_updates={"video_url": video_url})
+        await _sql_write(db, story_id, content_updates={"video_url": video_url})
 
         # --- Step 4: Finalize ---
         story.status = "ready"
-        _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
+        await _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
         await db.commit()
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
-        _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
+        await _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
