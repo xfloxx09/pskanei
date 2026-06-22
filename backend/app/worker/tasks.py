@@ -10,14 +10,15 @@ async def _sql_write(db, story_id, content_updates: dict = None, status: str = N
     if content_updates:
         for k, v in content_updates.items():
             await db.execute(
-                _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = :id::uuid"),
+                _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
                 {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
             )
     if status:
         await db.execute(
-            _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = :id::uuid"),
+            _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
             {"st": status, "id": story_id},
         )
+    await db.commit()
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=120)
