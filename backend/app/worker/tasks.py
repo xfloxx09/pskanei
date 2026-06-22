@@ -435,7 +435,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not tts_url:
             try:
                 edge = EdgeTTSProvider()
-                tts_url = await edge.generate_speech(voiceover)
+                tts_url = await asyncio.wait_for(edge.generate_speech(voiceover), timeout=45)
+            except asyncio.TimeoutError:
+                tts_errors.append("EdgeTTS: timed out after 45s")
             except Exception as exc:
                 tts_errors.append(f"EdgeTTS: {exc}")
 
