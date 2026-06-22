@@ -377,6 +377,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                         continue
                     key = _get_key(pid)
                     if not key:
+                        story.content["status_msg"] = f"{p.name}: no key set, skipping"
+                        flag_modified(story, "content")
+                        await db.commit()
                         continue
                     story.content["status_msg"] = f"Calling {p.name}..."
                     flag_modified(story, "content")
@@ -427,6 +430,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     continue
                 key = _get_key(pid)
                 if not key:
+                    story.content["status_msg"] = f"{p.name}: no key set, skipping"
+                    flag_modified(story, "content")
+                    await db.commit()
                     continue
                 story.content["status_msg"] = f"Calling {p.name}..."
                 flag_modified(story, "content")
@@ -490,6 +496,9 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
                     continue
                     key = _get_key(pid)
                     if not key:
+                        story.content["status_msg"] = f"{p.name}: no key set, skipping"
+                        flag_modified(story, "content")
+                        await db.commit()
                         continue
                     story.content["status_msg"] = f"Calling {p.name}..."
                     flag_modified(story, "content")
