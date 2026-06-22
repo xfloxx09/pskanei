@@ -5,7 +5,23 @@ from .celery_app import app
 
 
 async def _sql_write(db, story_id, content_updates: dict = None, status: str = None):
-    pass  # Don't use this anymore — use ORM directly below
+    """Write directly via engine connection — bypasses session entirely."""
+    from sqlalchemy import text as _t
+    # Use the engine bound to this session's sync engine
+    engine = db.get_bind()
+    async with engine.connect() as conn:
+        if content_updates:
+            for k, v in content_updates.items():
+                await conn.execute(
+                    _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
+                    {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
+                )
+        if status:
+            await conn.execute(
+                _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
+                {"st": status, "id": story_id},
+            )
+        await conn.commit()
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=120)
@@ -400,9 +416,6 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not prompt:
             err_msg = f"LLM failed: {'; '.join(llm_errors_list) if llm_errors_list else 'no provider worked'}"
             story.status = "failed"
-            await db.commit()
-            return
-            story.status = "failed"
             story.content["error"] = err_msg
             story.content["status_msg"] = "LLM failed"
             flag_modified(story, "content")
@@ -465,9 +478,6 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
         if not tts_url:
             err_msg = f"TTS failed: {'; '.join(tts_errors) if tts_errors else 'no provider worked'}"
             story.status = "failed"
-            await db.commit()
-            return
-            story.status = "failed"
             story.content["error"] = err_msg
             story.content["status_msg"] = "TTS failed"
             flag_modified(story, "content")
@@ -518,9 +528,6 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
 
         if not video_url:
             err_msg = f"Video failed: {'; '.join(video_errors) if video_errors else 'no provider worked'}"
-            story.status = "failed"
-            await db.commit()
-            return
             story.status = "failed"
             story.content["error"] = err_msg
             story.content["status_msg"] = "Video failed"
