@@ -400,15 +400,15 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _set(story, {"error": err_msg, "status_msg": "LLM failed"})
+            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "LLM failed"})
             return {"status": "error", "reason": err_msg}
 
         story.content["prompt"] = prompt
         await db.commit()
-        _set(story, {"prompt": prompt})
+        _sql_write(db, story_id, content_updates={"prompt": prompt})
 
         # --- Step 2: Generate TTS ---
-        _set(story, {"status_msg": "Generating voiceover..."})
+        _sql_write(db, story_id, content_updates={"status_msg": "Generating voiceover..."})
         voiceover = prompt.get("voiceover_script", story.title)
         tts_classes = [
             ("Voiceover (TTS)", ElevenLabsProvider),
@@ -445,13 +445,13 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _set(story, {"error": err_msg, "status_msg": "TTS failed"})
+            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "TTS failed"})
             return {"status": "error", "reason": err_msg}
 
-        _set(story, {"tts_url": tts_url})
+        _sql_write(db, story_id, content_updates={"tts_url": tts_url})
 
         # --- Step 3: Render video ---
-        _set(story, {"status_msg": "Rendering video..."})
+        _sql_write(db, story_id, content_updates={"status_msg": "Rendering video..."})
         video_classes = [
             ("Video assembly", CreatomateProvider),
             ("Video assembly", ShotstackProvider),
@@ -482,17 +482,17 @@ async def _run_create_pipeline_inner(story_id: str, skip_budget_check: bool = Fa
             story.status = "failed"
             await db.commit()
             return
-            _set(story, {"error": err_msg, "status_msg": "Video failed"})
+            _sql_write(db, story_id, content_updates={"error": err_msg, "status_msg": "Video failed"})
             return {"status": "error", "reason": err_msg}
 
-        _set(story, {"video_url": video_url})
+        _sql_write(db, story_id, content_updates={"video_url": video_url})
 
         # --- Step 4: Finalize ---
         story.status = "ready"
-        _set(story, status_msg="Ready")
+        _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
         await db.commit()
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
-        _set(story, {"status_msg": "Ready"})
+        _sql_write(db, story_id, content_updates={"status_msg": "Ready"})
 
         return {"status": "ok", "story_id": story_id, "video_url": video_url}
 
