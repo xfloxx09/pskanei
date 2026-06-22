@@ -5,20 +5,26 @@ from .celery_app import app
 
 
 async def _sql_write(db, story_id, content_updates: dict = None, status: str = None):
-    """Write content/status to DB using raw SQL — same pattern that works in curate endpoint."""
+    """Write content/status to DB using an independent connection — bypasses any session issues."""
+    from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import text as _t
-    if content_updates:
-        for k, v in content_updates.items():
-            await db.execute(
-                _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
-                {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
-            )
-    if status:
-        await db.execute(
-            _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
-            {"st": status, "id": story_id},
-        )
-    await db.commit()
+    from ..config import settings as _cfg
+    eng = create_async_engine(_cfg.async_database_url)
+    try:
+        async with eng.begin() as conn:
+            if content_updates:
+                for k, v in content_updates.items():
+                    await conn.execute(
+                        _t("UPDATE stories SET content = jsonb_set(COALESCE(content, '{}'), :path, :val::jsonb, true), updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
+                        {"path": "{" + k + "}", "val": _json_module.dumps(v), "id": story_id},
+                    )
+            if status:
+                await conn.execute(
+                    _t("UPDATE stories SET status = :st, updated_at = NOW() WHERE id = CAST(:id AS uuid)"),
+                    {"st": status, "id": story_id},
+                )
+    finally:
+        await eng.dispose()
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=120)
